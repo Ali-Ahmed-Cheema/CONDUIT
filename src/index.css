@@ -1239,3 +1239,541 @@ footer svg {
     grid-template-columns: 1fr;
   }
 }
+
+/* Match the compact, monochrome layout of frontend/conduit. */
+:root {
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  color: #111;
+  background: #fff;
+  --purple: #111;
+  --line: #d5d5d5;
+}
+
+*,
+*::before,
+*::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+  background: #fff;
+  color: #111;
+}
+
+body {
+  position: fixed;
+  inset: 0;
+  min-width: 320px;
+  overscroll-behavior: none;
+}
+
+button,
+input,
+textarea {
+  color: #111;
+  font: inherit;
+}
+
+button {
+  min-height: 40px;
+  border: 1px solid #111;
+  border-radius: 3px;
+  background: #fff;
+  touch-action: manipulation;
+}
+
+button:disabled {
+  border-color: #999;
+  color: #777;
+}
+
+input,
+textarea {
+  border: 1px solid #888;
+  border-radius: 3px;
+  background: #fff;
+}
+
+.app-shell,
+.page {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.page {
+  display: grid;
+  grid-template-rows: 58px minmax(0, 1fr);
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 14px;
+}
+
+.topbar {
+  position: relative;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  min-height: 58px;
+  height: auto;
+  padding: max(8px, env(safe-area-inset-top)) 0 8px;
+  border: 0;
+  border-bottom: 1px solid #d5d5d5;
+  border-radius: 0;
+  background: #fff;
+}
+
+.header-menu {
+  position: relative;
+}
+
+.icon-button,
+.menu-toggle {
+  display: grid;
+  width: 40px;
+  min-height: 40px;
+  place-items: center;
+  padding: 6px;
+  border-radius: 3px;
+  color: #111;
+  background: #fff;
+}
+
+.menu-toggle:hover,
+.icon-button:hover {
+  background: #f2f2f2;
+}
+
+.brand-panel {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.brand-label {
+  max-width: 100%;
+  overflow: hidden;
+  color: #111;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brand-time {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #555;
+  font-size: 10px;
+}
+
+.topbar-right {
+  display: grid;
+  min-height: 40px;
+  place-items: center;
+  color: #111;
+}
+
+.menu-panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 7px);
+  left: 0;
+  display: grid;
+  width: min(260px, calc(100vw - 28px));
+  gap: 2px;
+  max-height: min(70vh, 500px);
+  overflow-y: auto;
+  border: 1px solid #111;
+  border-radius: 0;
+  padding: 7px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.menu-heading {
+  padding: 7px 10px 5px;
+  color: #555;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.menu-panel button {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  border-radius: 0;
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 12px;
+}
+
+.menu-panel button:hover,
+.menu-panel button:focus-visible,
+.menu-panel button.menu-selected {
+  background: #f2f2f2;
+}
+
+.menu-panel button span {
+  color: #666;
+  font-size: 10px;
+}
+
+.menu-note {
+  margin: 5px 0 0;
+  border-top: 1px solid #d5d5d5;
+  padding: 10px 10px 5px;
+  color: #555;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.content {
+  width: min(1080px, 100%);
+  min-height: 0;
+  overflow: auto;
+  margin: 0 auto;
+  padding: clamp(12px, 2vw, 24px) 2px max(16px, env(safe-area-inset-bottom));
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.page-title {
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.eyebrow,
+.section-kicker,
+.kicker {
+  color: #555;
+}
+
+.page-title h1 {
+  margin: 7px 0 5px;
+  color: #111;
+  font-size: 23px;
+  letter-spacing: 0;
+}
+
+.page-title p,
+.section-heading p {
+  color: #555;
+}
+
+.primary,
+.cancel {
+  min-height: 40px;
+  border: 1px solid #111;
+  border-radius: 3px;
+  color: #111;
+  background: #fff;
+  box-shadow: none;
+}
+
+.primary:hover,
+.cancel:hover {
+  transform: none;
+  background: #f2f2f2;
+}
+
+.privacy-banner {
+  border: 1px solid #111;
+  border-radius: 3px;
+  background: #fff;
+}
+
+.privacy-icon,
+.stat-icon,
+.saved-icon,
+.protection-icon,
+.dialog-mark {
+  border: 1px solid #111;
+  border-radius: 3px;
+  color: #111;
+  background: #fff;
+}
+
+.privacy-banner strong,
+.privacy-banner p,
+.privacy-banner > span {
+  color: #333;
+}
+
+.privacy-banner > span {
+  border-color: #aaa;
+}
+
+.stats > div,
+.saved-list,
+.card,
+.protections,
+.responses,
+.empty {
+  border-color: #d5d5d5;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.stats label,
+.stats small,
+.section-heading p,
+.saved-name small,
+.type-category,
+.purpose,
+.type-result,
+.response-items span,
+.protections p {
+  color: #555;
+}
+
+.stats label strong,
+.section-heading h2,
+.card h4,
+.saved-name strong {
+  color: #111;
+}
+
+.type-icon,
+.type-icon.visibility,
+.type-icon.permission,
+.type-icon.environment,
+.type-icon.token,
+.type-icon.machine {
+  border: 1px solid #111;
+  border-radius: 3px;
+  color: #111;
+  background: #fff;
+}
+
+.card-top > button {
+  border-color: #111;
+  border-radius: 3px;
+  color: #111;
+}
+
+.card-top > button:hover,
+.enter:hover {
+  color: #111;
+  background: #f2f2f2;
+}
+
+.example,
+.count-pill,
+.added,
+.response-code,
+.c200,
+.c401,
+.c403,
+.c429 {
+  border: 1px solid #d5d5d5;
+  border-radius: 3px;
+  color: #333;
+  background: #fff;
+}
+
+.result {
+  border-color: #d5d5d5;
+}
+
+.result > b {
+  color: #333;
+}
+
+.enter {
+  color: #111;
+}
+
+.group-heading h3,
+.response-title {
+  color: #222;
+}
+
+.dot,
+.dot.permission,
+.dot.environment,
+.dot.token,
+.dot.machine,
+.local i,
+.memory i {
+  border: 1px solid #111;
+  background: #fff;
+  box-shadow: none;
+}
+
+.search {
+  border-color: #888;
+  border-radius: 3px;
+}
+
+.search input {
+  font-size: 16px;
+}
+
+.restrictions-icon,
+.restriction-tags span {
+  border-color: #d5d5d5;
+  border-radius: 3px;
+  color: #333;
+  background: #fff;
+}
+
+.restriction-tags svg,
+.responses-heading svg {
+  color: #333;
+}
+
+.dialog-backdrop {
+  background: #0008;
+  backdrop-filter: none;
+}
+
+.credential-dialog {
+  border: 1px solid #111;
+  border-radius: 3px;
+  box-shadow: none;
+}
+
+.dialog-type-icon,
+.dialog-context,
+.dialog-warning {
+  border-radius: 0;
+  color: #333;
+  background: #fff;
+}
+
+.dialog-warning {
+  border-color: #999;
+  color: #333;
+}
+
+.dialog-warning svg,
+.dialog-context svg {
+  color: #333;
+}
+
+.form-field input,
+.form-field textarea {
+  border-color: #888;
+  border-radius: 3px;
+  font-size: 16px;
+}
+
+.reveal-button {
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+}
+
+.toast {
+  border-color: #111;
+  border-radius: 3px;
+  color: #111;
+  background: #fff;
+  box-shadow: none;
+}
+
+.page-footer,
+.page-footer svg {
+  color: #555;
+}
+
+@media (max-width: 600px) {
+  .page {
+    grid-template-rows: 54px minmax(0, 1fr);
+    padding: 0 10px;
+  }
+
+  .topbar {
+    min-height: 54px;
+  }
+
+  .content {
+    padding-right: 2px;
+    padding-left: 2px;
+  }
+
+  .page-title {
+    align-items: flex-start;
+  }
+
+  .page-title .primary {
+    width: auto;
+  }
+
+  .cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dialog-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .credential-dialog {
+    width: 100%;
+    max-height: 94vh;
+    border-radius: 3px 3px 0 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .cards {
+    grid-template-columns: 1fr;
+  }
+
+  .page-title {
+    flex-direction: column;
+  }
+
+  .page-title .primary {
+    width: 100%;
+  }
+
+  .privacy-banner > span {
+    display: none;
+  }
+
+  .stats {
+    grid-template-columns: 1fr;
+  }
+
+  .stats > div {
+    min-height: 64px;
+    align-items: center;
+  }
+
+  .stats small {
+    right: 12px;
+    bottom: auto;
+    left: auto;
+  }
+
+  .response-items {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

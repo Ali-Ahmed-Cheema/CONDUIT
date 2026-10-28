@@ -1,7 +1,8 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   AlertTriangle,
   Check,
+  Clock3,
   CircleHelp,
   Eye,
   EyeOff,
@@ -9,6 +10,7 @@ import {
   Globe2,
   KeyRound,
   LockKeyhole,
+  Menu,
   Plus,
   Search,
   Server,
@@ -50,6 +52,23 @@ function App() {
   const [selected, setSelected] = useState<CredentialType | null>(null);
   const [saved, setSaved] = useState<SavedCredential[]>([]);
   const [toast, setToast] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 20_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [menuOpen]);
+
   const visible = useMemo(
     () =>
       types.filter(
@@ -81,63 +100,76 @@ function App() {
   }
 
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <a className="brand" href="#" aria-label="CONDUIT home">
-          <span className="brand-icon">
-            <i />
-          </span>
-          <span>
-            CONDUIT<small>V3</small>
-          </span>
-        </a>
-        <div className="side-label">WORKSPACE</div>
-        <div className="active-nav">
-          <KeyRound size={17} /> Credentials <span>{saved.length}</span>
-        </div>
-        <div className="side-label category-label">CREDENTIAL TYPES</div>
-        <nav aria-label="Credential categories">
-          {groups.map((group) => (
+    <div className="app-shell">
+      <div className="page">
+        <header className="topbar">
+          <div className="header-menu">
             <button
-              className={`side-nav ${filter === group ? "selected" : ""}`}
-              key={group}
-              onClick={() => setFilter(group)}
+              aria-controls="credential-navigation"
+              aria-expanded={menuOpen}
+              aria-label={
+                menuOpen ? "Close navigation menu" : "Open navigation menu"
+              }
+              className="icon-button menu-toggle"
+              onClick={() => setMenuOpen((open) => !open)}
               type="button"
             >
-              <i />
-              {group}
-              <span>
-                {group === "All types"
-                  ? types.length
-                  : types.filter((item) => item.group === group).length}
-              </span>
+              <Menu size={19} />
             </button>
-          ))}
-        </nav>
-        <div className="sidebar-spacer" />
-        <div className="sidebar-note">
-          <LockKeyhole size={17} />
-          <div>
-            <strong>Session-only workspace</strong>
-            <p>
-              Entries stay in page memory and clear when you reload or close
-              this tab.
-            </p>
+            {menuOpen && (
+              <nav
+                aria-label="Credential navigation"
+                className="menu-panel"
+                id="credential-navigation"
+              >
+                <strong className="menu-heading">CREDENTIAL CATEGORIES</strong>
+                {groups.map((group) => (
+                  <button
+                    aria-current={filter === group ? "page" : undefined}
+                    className={filter === group ? "menu-selected" : ""}
+                    key={group}
+                    onClick={() => {
+                      setFilter(group);
+                      setMenuOpen(false);
+                      document
+                        .getElementById("credential-types")
+                        ?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    type="button"
+                  >
+                    {group}
+                    <span>
+                      {group === "All types"
+                        ? types.length
+                        : types.filter((item) => item.group === group).length}
+                    </span>
+                  </button>
+                ))}
+                <p className="menu-note">
+                  Entries are kept in page memory only and clear when this tab
+                  closes.
+                </p>
+              </nav>
+            )}
           </div>
-        </div>
-        <div className="sidebar-foot">CONDUIT · LOCAL WORKSPACE</div>
-      </aside>
-
-      <main>
-        <header className="topbar">
-          <div>
-            Workspace <span>/</span> <b>Credentials</b>
+          <div className="brand-panel">
+            <span className="brand-label">CONDUIT · API CREDENTIALS</span>
+            <span className="brand-time">
+              <Clock3 size={12} />{" "}
+              {new Intl.DateTimeFormat(undefined, {
+                dateStyle: "medium",
+                timeStyle: "short",
+              }).format(now)}
+            </span>
           </div>
-          <div className="local">
-            <i /> Local session
+          <div
+            className="topbar-right"
+            title="Values remain in this page session"
+          >
+            <LockKeyhole size={17} />
           </div>
         </header>
-        <div className="content">
+        <main className="content">
           <section className="page-title">
             <div>
               <div className="eyebrow">
@@ -249,7 +281,7 @@ function App() {
             </section>
           )}
 
-          <section className="type-section">
+          <section className="type-section" id="credential-types">
             <div className="section-heading types-heading">
               <div>
                 <div className="kicker">REFERENCE & INPUTS</div>
@@ -405,8 +437,8 @@ function App() {
             </span>
             <span>CONDUIT V3 · CREDENTIAL REFERENCE</span>
           </footer>
-        </div>
-      </main>
+        </main>
+      </div>
       {selected && (
         <CredentialDialog
           type={selected}
