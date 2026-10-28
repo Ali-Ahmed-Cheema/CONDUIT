@@ -1,1 +1,1 @@
-make the CONDUIT frontend ui like the ui in the frontend folder
+dell 2
