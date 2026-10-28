@@ -1,1 +1,1 @@
-merge commint all the changes to the main to the remote
+merge commint all the changes to the main to the remoteremove confi
