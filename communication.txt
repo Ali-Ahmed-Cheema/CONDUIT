@@ -1,1 +1,1 @@
-merge commint all the changes to the main to the remoteremove confi
+make the CONDUIT frontend ui like the ui in the frontend folder
