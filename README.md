@@ -64,5 +64,3 @@ npm test
 - Provider API keys are sent only to the local API service for validation and chat. Saved keys are encrypted with AES-256-GCM using the private key in `.env`.
 - Chat history and settings are encrypted in IndexedDB with AES-GCM. The data-encryption key is held in memory only while unlocked.
 - The lock screen, verifier, and local service are intended for a single-device local prototype, not as a production authentication boundary. Do not expose the local API service to an untrusted network.
-hello Dell 2!
-from Dell 1,
