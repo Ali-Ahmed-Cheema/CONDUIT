@@ -17,7 +17,7 @@ npm run dev
 
 Open the Vite URL printed in the terminal (normally `http://localhost:5173`). The dev command starts both the chat UI and the local API service. Use `npm run dev:web` and `npm run dev:api` to run them separately.
 
-The all-types credential reference is still available separately with `npm run dev:reference` (normally `http://localhost:5174`). Its session-only forms are a reference UI; use **API Config** in the chat app to add provider keys for actual conversations.
+The chat app's navigation menu includes **Credential reference** for the all-types catalog and session-only forms. Use **API Config** to add provider keys for actual conversations. The standalone reference UI is also available with `npm run dev:reference` (normally `http://localhost:5174`).
 
 ## Set up chat
 

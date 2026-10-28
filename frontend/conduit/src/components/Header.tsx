@@ -1,4 +1,4 @@
-import { ArrowLeft, Clock3, Lock, Menu, Plus, Shield } from "lucide-react";
+import { ArrowLeft, Clock3, KeyRound, Lock, Menu, Plus, Shield } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { F } from "../lib/time";
@@ -57,6 +57,7 @@ export function Header({ title, showBack = false, showLock = true }: HeaderProps
           <Link to="/" onClick={() => { setActiveConversationId(null); setMenuOpen(false); }}><Plus size={16} /> New Chat</Link>
           <Link to="/history" onClick={() => setMenuOpen(false)}><Clock3 size={16} /> History</Link>
           <Link to="/api-config" onClick={() => setMenuOpen(false)}><Shield size={16} /> API Config</Link>
+          <Link to="/credentials" onClick={() => setMenuOpen(false)}><KeyRound size={16} /> Credential reference</Link>
           <Link to="/settings" onClick={() => setMenuOpen(false)}><Menu size={16} /> Settings</Link>
           <Link to="/about" onClick={() => setMenuOpen(false)}><ArrowLeft size={16} /> About</Link>
         </nav>

@@ -123,6 +123,9 @@ function App() {
                 id="credential-navigation"
               >
                 <strong className="menu-heading">CREDENTIAL CATEGORIES</strong>
+                <a className="menu-chat-link" href="#/">
+                  Return to chat
+                </a>
                 {groups.map((group) => (
                   <button
                     aria-current={filter === group ? "page" : undefined}
