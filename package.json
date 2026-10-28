@@ -4,11 +4,14 @@
   "version": "3.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "dev:web": "vite --host 0.0.0.0",
-    "build": "tsc -b && vite build",
+    "dev": "npm --prefix frontend/conduit run dev",
+    "dev:api": "npm --prefix frontend/conduit run dev:api",
+    "dev:web": "npm --prefix frontend/conduit run dev:web",
+    "start:api": "npm --prefix frontend/conduit run start:api",
+    "build": "npm --prefix frontend/conduit run build",
     "test": "vitest run",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "npm --prefix frontend/conduit run preview",
+    "generate:verify": "npm --prefix frontend/conduit run generate:verify"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.17",
