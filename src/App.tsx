@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   AlertTriangle,
   Check,
@@ -46,7 +46,7 @@ type SavedCredential = {
   restrictions: Record<string, string>;
 };
 
-function App() {
+export function CredentialWorkspace() {
   const [filter, setFilter] = useState<GroupFilter>("All types");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<CredentialType | null>(null);
@@ -54,6 +54,7 @@ function App() {
   const [toast, setToast] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const credentialTypesSection = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 20_000);
@@ -134,9 +135,7 @@ function App() {
                     onClick={() => {
                       setFilter(group);
                       setMenuOpen(false);
-                      document
-                        .getElementById("credential-types")
-                        ?.scrollIntoView({ behavior: "smooth" });
+                      credentialTypesSection.current?.scrollIntoView({ behavior: "smooth" });
                     }}
                     type="button"
                   >
@@ -284,7 +283,7 @@ function App() {
             </section>
           )}
 
-          <section className="type-section" id="credential-types">
+          <section className="type-section" id="credential-types" ref={credentialTypesSection}>
             <div className="section-heading types-heading">
               <div>
                 <div className="kicker">REFERENCE & INPUTS</div>
@@ -722,4 +721,4 @@ function CredentialDialog({
   );
 }
 
-export default App;
+export default CredentialWorkspace;

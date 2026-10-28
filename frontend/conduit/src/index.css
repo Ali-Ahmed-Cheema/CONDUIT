@@ -145,6 +145,13 @@ textarea {
   overflow: hidden;
 }
 
+.credential-reference-host {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .topbar {
   position: relative;
   z-index: 20;
