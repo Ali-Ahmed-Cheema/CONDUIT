@@ -4,13 +4,10 @@
   "version": "3.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k \"npm:dev:api\" \"npm:dev:web\"",
-    "dev:api": "tsx watch server/index.ts",
+    "dev": "npm run dev:web",
     "dev:web": "vite --host 0.0.0.0",
-    "start:api": "tsx server/index.ts",
     "build": "tsc -b && vite build",
-    "test": "vitest run",
-    "generate:verify": "node scripts/generate-verifier.mjs"
+    "test": "vitest run"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.17",
