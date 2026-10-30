@@ -40,13 +40,13 @@ credentials that were ever present and coordinate history scrubbing; this
 roadmap does not rewrite shared history.
 
 During Track 0 migration, the frozen pnpm workspace install succeeded. The
-latest local verification passed 140/140 Vitest tests, the Playwright smoke
+latest local verification passed 155/155 Vitest tests, the Playwright smoke
 test 1/1, lint, typecheck, direct production builds of `apps/web` and
 `packages/credential-reference`, and OpenAPI/client regeneration checks. The
 web app's largest initial JS chunk is 117.50 KB gzip; chat is lazy-loaded at
 67.68 KB gzip. Dependency audit reports one low-severity advisory; CycloneDX
-output includes all seven workspaces and their installed dependency closure
-(2,995 components). The API feature flag and shared Zod contracts are
+output includes all ten workspaces and their installed dependency closure
+(2,997 components). The API feature flag and shared Zod contracts are
 implemented; Hono currently exposes only the health/OpenAPI routes, and
 Express remains the default. Core, providers, crypto primitives, IndexedDB
 storage, shared UI components, and credential reference are extracted. This is
@@ -54,10 +54,10 @@ a migration checkpoint, not a Track 0 exit result. The aggregate Turbo build
 command could not resolve a standalone `pnpm` binary from this local
 Corepack-only PATH; both app workspace builds passed directly. CI has the Node
 20/22 Linux/macOS/Windows matrix, but it has not run against the current
-uncommitted tree. Agent, RAG, and plugin SDK runtimes; desktop and CLI package
-extraction; full route parity; broad API/storage schema coverage; and
-browser-level V3 fixture migration verification still need completion. Agent,
-RAG, and plugin SDK currently have schema scaffolding only.
+uncommitted tree. Agent, RAG, and plugin SDK runtimes; desktop and CLI
+application packages; full route parity; broad API/storage schema coverage;
+and browser-level V3 fixture migration verification still need completion.
+Agent, RAG, and plugin SDK currently have schema scaffolding only.
 Encrypted password/device fixture merging and atomic rollback are covered by
 local storage tests.
 
