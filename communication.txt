@@ -1,1 +1,113 @@
-Started
+You are the lead engineer on Ali-Ahmed-Cheema/CONDUIT. Evolve CONDUIT V3.0 (local, single-device multi-provider AI chat: React 19 + TS + Vite, Express 5 on 127.0.0.1, Zustand, IndexedDB AES-GCM vault, PBKDF2 worker, Vitest) into CONDUIT V4: a local-first, privacy-preserving AI workspace platform with agents, tools, local models, retrieval, plugins, encrypted sync, and desktop/mobile builds.
+
+NORTH STAR
+Local-first and private by default. Nothing leaves the device except what the user explicitly sends to a provider or sync target. Every advanced feature must degrade gracefully (works offline, works without a GPU, works with only one API key).
+
+HOW TO WORK
+- Start by reading the repo, existing tests, and docs. Write docs/ARCHITECTURE.md (current state), docs/THREAT_MODEL.md, and docs/ROADMAP.md (this plan, with your adjustments) and commit them before coding.
+- Work track by track in the order below. For each track: write a short design note in docs/adr/NNN-title.md (decision, alternatives, consequences), implement behind a feature flag, add tests, update docs, run lint, typecheck, test, and build, then commit with a focused message.
+- Each track has EXIT CRITERIA. Do not move on until they pass.
+- Preserve existing user data. Every storage change needs a versioned migration with a tested rollback path or backup step.
+- If a decision is ambiguous, risks data loss, or adds a heavy dependency, stop and ask.
+- Never print, log, or commit secrets, .env contents, passwords, or keys. Tests mock all network and never use real keys.
+
+TRACK 0: FOUNDATION RE-PLATFORM
+1. Convert to a monorepo (pnpm workspaces + Turborepo): apps/web, apps/desktop, apps/cli, packages/core (types, schemas), packages/providers, packages/crypto, packages/storage, packages/agent, packages/rag, packages/plugin-sdk, packages/ui, packages/credential-reference (single source of truth, replacing the duplicated root app).
+2. Shared Zod schemas for every API and storage boundary; derive TS types from them. Strict TS, no `any`.
+3. Replace the ad-hoc API with a typed layer (Hono or Fastify) exposing an OpenAPI spec and a generated typed client. Keep loopback-only binding, a Host/Origin allowlist, rate limits, and strict security headers.
+4. Tooling: ESLint + Prettier, Husky + lint-staged, Changesets for versioning, commitlint, GitHub Actions matrix (Node 20/22, Linux/macOS/Windows), dependency audit, SBOM (CycloneDX), and OSV scanning.
+EXIT: one-command bootstrap, green CI on all OSes, V3 data opens in V4 via migration.
+
+TRACK 1: STORAGE AND SECURITY ENGINE
+1. Move from a single encrypted JSON blob to a structured, encrypted, queryable store: SQLite (WASM + OPFS in browser, better-sqlite3 in desktop/server) with Drizzle ORM and field- or page-level encryption. Chats, messages, attachments, memories, prompts, agents, and documents become tables with indexes and full-text search (FTS5).
+2. Key hierarchy: a random master data key wrapped by (a) password-derived KEK (use Argon2id via WASM instead of PBKDF2, with a migration from PBKDF2), (b) optional WebAuthn passkey (PRF extension) unlock, (c) a printable recovery key. Support password change without re-encrypting all data (rewrap the master key only).
+3. In-app first-run setup (no hardcoded verifier or salts), auto-lock, memory zeroization where possible, secure clipboard clearing, and a panic "wipe now" action.
+4. Encrypted, versioned backup/export/import (single file, streaming, integrity-checked), plus scheduled local backups on desktop.
+5. Provider key storage: OS keychain on desktop (Keytar/Tauri keyring), AES-GCM file store as fallback; per-key usage limits and a spend cap per connection.
+6. Security tests: tamper tests, KDF parameter tests, fuzzing of parsers (SSE, import files), CSP verification, and an automated scan that no secret patterns exist in the repo.
+EXIT: 100k messages searchable under 100 ms; wrong-password, tamper, and migration tests pass.
+
+TRACK 2: PROVIDER PLATFORM
+1. Declarative provider registry (JSON/TS config) with capability flags: streaming, tools, vision, audio, JSON mode, reasoning, embeddings, image generation, context window, pricing. Adding an OpenAI-compatible provider = one config entry + contract tests.
+2. Add providers: Ollama, LM Studio, llama.cpp server, vLLM, Azure OpenAI, AWS Bedrock, Cohere, Together, Fireworks, DeepSeek, xAI, Perplexity, and any custom OpenAI-compatible endpoint.
+3. In-browser local inference via WebGPU (WebLLM / transformers.js) with model download manager, progress, cache management, and VRAM/RAM checks. Desktop: managed llama.cpp sidecar.
+4. Smart routing layer: fallback chains (provider A, then B on failure), retry with backoff before first byte, cost-aware and latency-aware routing, per-task default models, circuit breakers, and request hedging as an option.
+5. Unified normalized streaming events (text, reasoning, tool-call, usage, citation, error) across all providers; contract tests with recorded fixtures for each.
+6. Accurate token counting (tiktoken/provider tokenizers) and a cost ledger: per message, per conversation, per provider, per day, with budgets and alerts.
+EXIT: the same conversation can run on a cloud model and a fully offline local model; fallback chain demonstrated in an e2e test.
+
+TRACK 3: ADVANCED CHAT EXPERIENCE
+1. Conversation tree (branching) with visual branch navigator, edit-and-resend, regenerate, compare-branches diff view.
+2. Multi-model arena: send one prompt to N models side by side, with streaming, per-model latency/cost/token stats, voting, and saved comparisons.
+3. Multimodal: image/PDF/audio/file attachments, drag and drop, paste, camera capture; vision models; document parsing in a Web Worker.
+4. Voice: push-to-talk and hands-free mode with local Whisper (WASM/WebGPU) STT, streaming TTS (Web Speech or Piper/Kokoro local), barge-in interruption, and optional realtime provider APIs.
+5. Artifacts: render code, HTML, SVG, Mermaid, charts, and React previews in a sandboxed iframe (strict CSP, no network, postMessage bridge). Versioned artifacts with diff and export.
+6. Code execution sandbox: Pyodide (Python) and JS in isolated workers with file system, plot output, time and memory limits, and user-approved execution.
+7. Rich rendering: LaTeX (KaTeX), syntax highlighting with copy and run, tables to CSV/XLSX, citations with source cards, reasoning/"thinking" collapsible sections.
+8. Prompt library with variables/templates, slash commands, snippets, personas, and a command palette (Cmd/Ctrl+K) over everything.
+9. Semantic and full-text search across all chats; auto-titling, auto-tagging, summarization of long threads, and context compression when nearing the window limit.
+EXIT: keyboard-only operation of every feature; 10k-message conversation scrolls at 60 fps.
+
+TRACK 4: TOOLS, MCP, AND AGENTS
+1. Tool-calling framework: typed tool definitions (Zod), parallel tool calls, per-tool permission prompts (allow once/always/never), full audit log, and dry-run mode.
+2. MCP client (stdio via desktop sidecar, SSE/streamable HTTP in browser): add servers in UI, discover tools/resources/prompts, per-server permissions and sandboxing.
+3. Built-in tools: web search (pluggable backends), URL fetch with readability extraction, calculator, code interpreter (Track 3), file read/write in a user-granted workspace folder (File System Access API / desktop), calendar-style date/time, and a RAG search tool (Track 5).
+4. Agent runtime (packages/agent): plan, act, observe loops with step limits, token/cost budgets, cancellation, resumability from persisted state, and human-in-the-loop approvals. Support ReAct, plan-and-execute, and supervisor/worker multi-agent patterns.
+5. Visual workflow builder: node graph (React Flow) for chaining prompts, tools, conditionals, loops, and agents; run history with per-node traces; import/export as JSON; schedule runs on desktop.
+6. Prompt-injection defenses: tool output is always treated as untrusted data, content-origin tagging, confirmation for sensitive tool actions, URL and domain allowlists, and tests with known injection payloads.
+EXIT: an agent completes a multi-step research-and-write task offline-mockable in tests, with an inspectable trace and enforced budget.
+
+TRACK 5: KNOWLEDGE, MEMORY, AND RAG
+1. Local knowledge bases: import PDFs, DOCX, Markdown, text, web pages, and folders; chunking strategies (semantic, recursive, by heading); metadata extraction.
+2. Local embeddings (transformers.js / ONNX) with provider-embedding fallback; vector index in SQLite (sqlite-vec) or HNSW in WASM; hybrid search (BM25 + vector) with reranking.
+3. Citations in answers linking to exact source passages; "why this source" explanations; per-chat knowledge-base selection.
+4. Long-term memory: user-controlled facts and preferences, automatic proposals the user must approve, view/edit/delete UI, scoped per project, and encrypted at rest.
+5. Projects/workspaces: group chats, files, prompts, agents, and knowledge under a project with its own system prompt and settings.
+6. Evaluation: retrieval quality tests (recall@k, MRR) on a bundled sample corpus.
+EXIT: ask questions over a 500-page corpus fully offline with correct citations; index updates incrementally.
+
+TRACK 6: PLUGIN AND EXTENSION PLATFORM
+1. packages/plugin-sdk: stable, versioned API for tools, providers, UI panels, slash commands, themes, and importers/exporters.
+2. Sandboxed execution (iframe/worker with capability-based permissions declared in a manifest; no ambient network or storage access); signed manifests and a local plugin installer with permission review.
+3. Example plugins: GitHub issue reader, Notion-style export, RSS summarizer, Pomodoro/notes panel, custom theme pack. Plugin dev docs, a scaffolding CLI (create-conduit-plugin), and contract tests.
+EXIT: a third-party-style plugin installs, asks for permissions, runs sandboxed, and cannot exceed them (tested).
+
+TRACK 7: SYNC AND MULTI-DEVICE (OPT-IN, END-TO-END ENCRYPTED)
+1. CRDT-based data model (Yjs or Automerge) for conversations, settings, and prompts; sync transports: self-hosted relay (small Node/Cloudflare Worker server that only sees ciphertext), WebDAV/S3, or local-network peer-to-peer (WebRTC).
+2. Device pairing via QR code and short authentication string; per-device keys; revoke device; zero-knowledge server design documented in the threat model.
+3. Conflict handling, offline queue, selective sync (never sync provider API keys unless explicitly enabled).
+EXIT: two browser profiles converge after offline edits; server-side inspection shows only ciphertext.
+
+TRACK 8: APPLICATIONS AND DISTRIBUTION
+1. Desktop app with Tauri 2: native menus, global hotkey quick-ask window, tray icon, OS keychain, file associations, auto-update with signature verification, deep links, and sidecars for local models and MCP stdio servers.
+2. PWA hardening: offline shell, background sync for queued messages, share target, install prompts, and no caching of provider responses or secrets.
+3. CLI (apps/cli): `conduit chat`, `conduit ask`, pipe stdin/stdout, run saved workflows, manage connections, export/import, usable with the same encrypted store.
+4. Optional local REST/OpenAI-compatible gateway so other tools can use CONDUIT's connections and routing (auth token required, loopback only, off by default).
+5. Docker image and docker-compose for the relay and headless mode; reproducible builds; release pipeline producing signed installers for Windows, macOS, and Linux plus checksums and provenance (SLSA/GitHub attestations).
+EXIT: signed desktop build installs, auto-updates, and passes the e2e suite.
+
+TRACK 9: OBSERVABILITY, EVALS, AND QUALITY
+1. Local-only telemetry by default: structured logs with redaction, OpenTelemetry traces (opt-in export), an in-app diagnostics page (latency, errors, token usage, storage size), and a "copy debug report" that excludes content and secrets.
+2. Prompt and model evaluation harness: datasets, assertions (exact, regex, JSON schema, LLM-as-judge), side-by-side runs, regression tracking, and CI mode with mocked providers.
+3. Testing pyramid: unit (Vitest), component (Testing Library), API contract (supertest + recorded fixtures), e2e (Playwright on Chromium/Firefox/WebKit), visual regression, accessibility (axe), property-based tests for crypto and parsers, and load tests for the gateway. Target 85%+ coverage on packages/core, crypto, storage, and providers.
+4. Performance budgets enforced in CI: initial JS under 250 KB gzip for the shell (lazy-load everything heavy), Lighthouse PWA/perf/a11y scores of 90+, worker offloading for crypto, parsing, embeddings, and search.
+EXIT: CI blocks regressions on coverage, bundle size, a11y, and perf.
+
+TRACK 10: UX, ACCESSIBILITY, AND LOCALIZATION
+1. Design system in packages/ui (tokens, themes, density modes, high-contrast and reduced-motion support), Storybook with docs, and component tests.
+2. i18n framework (ICU messages) with RTL support; ship English and Urdu, plus a contributor guide for new languages. Locale-aware dates (keeping Asia/Karachi as default but configurable).
+3. WCAG 2.2 AA across the app: focus management, screen-reader announcements for streaming, keyboard shortcuts with a help overlay, mobile layouts down to 360px, and safe-area and on-screen-keyboard handling.
+4. Onboarding tour, empty states, and an in-app help center sourced from the docs.
+
+TRACK 11: DOCUMENTATION AND COMMUNITY
+README (3-command quick start), docs site (VitePress/Docusaurus) with architecture, security model, user guide, provider guide, plugin guide, API reference (generated from OpenAPI and TSDoc), SECURITY.md (with disclosure process), CONTRIBUTING.md, CODE_OF_CONDUCT.md, CHANGELOG via Changesets, issue/PR templates, and a public roadmap. Update .github/copilot-instructions.md to match the new architecture.
+
+GLOBAL RULES
+- Immediate security fix first: untrack the root `.env` if it is tracked (git rm --cached, update .gitignore), never print its contents, and tell me to rotate any real secrets and scrub git history.
+- Privacy defaults: no analytics, no remote fonts or CDNs at runtime, no network calls except user-initiated provider, search, sync, or update requests, and all of them listed in a transparent "network activity" screen.
+- Every new dependency needs a license check (MIT/Apache/BSD only unless approved), a size and maintenance justification in the commit message, and a lockfile update.
+- Feature flags for every track; the app must remain usable if any flagged feature is disabled or fails.
+- Keep V3 behavior working until the migration is verified; document breaking changes with migration steps.
+
+DELIVERABLES AT EACH TRACK END
+Summary of what shipped, list of files changed, test/coverage/bundle-size/perf numbers, known issues, and any manual steps I must do myself (rotating secrets, code-signing certificates, relay hosting, store accounts). At the very end, provide a V4.0.0 release checklist and a prioritized backlog for V4.x.
