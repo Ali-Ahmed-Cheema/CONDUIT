@@ -69,17 +69,13 @@ test("sets comfort preferences, streams a reply, and navigates accessibly", asyn
   });
 
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Make it comfortable" })).toBeVisible();
+  await expect(page.getByText("No active connection is configured")).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 900 });
-  const comfortAccessibility = await new AxeBuilder({ page }).analyze();
-  expect(comfortAccessibility.violations).toEqual([]);
+  await expect(page.getByRole("heading", { name: "Make it comfortable" })).toHaveCount(0);
   if (process.env.UPDATE_DESIGN_SCREENSHOTS === "1") {
     await mkdir(screenshotDir, { recursive: true });
-    await page.screenshot({ path: resolve(screenshotDir, "comfort.png"), fullPage: true });
+    await page.screenshot({ path: resolve(screenshotDir, "chat.png"), fullPage: true });
   }
-  await page.getByRole("button", { name: "Large", exact: true }).click();
-  await page.getByRole("button", { name: "Continue to chat" }).click();
-  await expect(page.getByText(/No active connection is configured/)).toBeVisible();
 
   await page.getByRole("link", { name: "New chat" }).focus();
   await page.keyboard.press("Tab");

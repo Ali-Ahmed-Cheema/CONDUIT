@@ -16,7 +16,7 @@ export interface UiPreferences {
 }
 
 export const defaultUiPreferences: UiPreferences = {
-  comfortSetupComplete: false,
+  comfortSetupComplete: true,
   simpleMode: true,
   textSize: "normal",
   reduceMotion: false,
@@ -28,7 +28,7 @@ export function readUiPreferences(value: unknown): UiPreferences {
   if (!value || typeof value !== "object" || Array.isArray(value)) return defaultUiPreferences;
   const stored = value as Record<string, unknown>;
   return {
-    comfortSetupComplete: stored.comfortSetupComplete === true,
+    comfortSetupComplete: true,
     simpleMode: typeof stored.simpleMode === "boolean" ? stored.simpleMode : defaultUiPreferences.simpleMode,
     textSize: stored.textSize === "large" || stored.textSize === "extra-large"
       ? stored.textSize

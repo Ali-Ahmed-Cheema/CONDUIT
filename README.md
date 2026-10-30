@@ -72,7 +72,7 @@ Provider credentials are sent only to the local API service for validation and c
 
 ## Design system and accessibility
 
-The UI uses shared React components from [packages/ui/src/index.tsx](./packages/ui/src/index.tsx) and app CSS design tokens in [apps/web/src/index.css](./apps/web/src/index.css). The first-run comfort screen and Settings let you change text size, theme, Simple Mode, motion, transparency, and contrast. These preferences are saved with the encrypted local workspace. The interface uses system fonts and makes no remote font or image requests.
+The UI uses shared React components from [packages/ui/src/index.tsx](./packages/ui/src/index.tsx) and app CSS design tokens in [apps/web/src/index.css](./apps/web/src/index.css). The Settings page lets you change text size, theme, Simple Mode, motion, transparency, and contrast. These preferences are saved with the encrypted local workspace. The interface uses system fonts and makes no remote font or image requests.
 
 Keyboard and screen-reader labels, visible focus rings, reduced-motion and reduced-transparency support, high-contrast surfaces, and responsive navigation are covered by the web tests. The Playwright smoke test runs axe on the chat screen in light and dark themes, then checks the composer at 360, 768, 1280, and 1920 pixels.
 
