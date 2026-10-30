@@ -360,6 +360,7 @@ export function ChatPage() {
     <div className="page-shell">
       <Header title="CONDUIT V3.0" />
       <main className="chat-page">
+        {currentConversation && <h1 className="sr-only">{currentConversation.title || "Conversation"}</h1>}
         <div className="model-pill glass">{modelLabel}</div>
 
         {currentConversation && (
@@ -384,11 +385,13 @@ export function ChatPage() {
             >
               {currentConversation.pinned ? <PinOff size={16} /> : <Pin size={16} />}
             </button>
-            <button type="button" className="icon-button" aria-label="Export conversation as Markdown" onClick={() => exportConversation("markdown")}>
-              <Download size={16} /> .md
+            <button type="button" className="icon-button" onClick={() => exportConversation("markdown")}>
+              <span className="sr-only">Export conversation as Markdown</span>
+              <Download size={16} /> <span>.md</span>
             </button>
-            <button type="button" className="icon-button" aria-label="Export conversation as JSON" onClick={() => exportConversation("json")}>
-              <Download size={16} /> .json
+            <button type="button" className="icon-button" onClick={() => exportConversation("json")}>
+              <span className="sr-only">Export conversation as JSON</span>
+              <Download size={16} /> <span>.json</span>
             </button>
           </div>
         )}

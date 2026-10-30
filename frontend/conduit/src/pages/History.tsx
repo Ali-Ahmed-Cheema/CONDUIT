@@ -1,5 +1,5 @@
 import { Pin, PinOff, Search, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "../components/Header";
 import { groupConversations } from "../lib/group";
 import { F } from "../lib/time";
@@ -14,6 +14,45 @@ export function HistoryPage() {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!deleteConfirm) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusableElements = () => Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? [],
+    );
+    focusableElements()[0]?.focus();
+
+    const trapDialogFocus = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSelectedId(null);
+        setDeleteConfirm(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = focusableElements();
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", trapDialogFocus);
+    return () => {
+      document.removeEventListener("keydown", trapDialogFocus);
+      previousFocus?.focus();
+    };
+  }, [deleteConfirm]);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -91,7 +130,7 @@ export function HistoryPage() {
         <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget) setDeleteConfirm(false);
         }}>
-          <div className="dialog glass" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title">
+          <div ref={dialogRef} className="dialog glass" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title" tabIndex={-1}>
             <h3 id="delete-dialog-title">Permanently delete this conversation?</h3>
             <p>This cannot be undone.</p>
             <div className="dialog-actions">

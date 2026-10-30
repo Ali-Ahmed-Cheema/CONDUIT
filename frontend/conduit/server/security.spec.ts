@@ -1,6 +1,5 @@
-import { createServer, request as sendHttpRequest } from "node:http";
-import type { AddressInfo } from "node:net";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import supertest from "supertest";
 import type { StoredConnection } from "./keyStore";
 
 const { decryptApiKey, readStore, writeStore } = vi.hoisted(() => ({
@@ -21,44 +20,31 @@ import { app } from "./index";
 
 const allowedOrigin = "http://localhost:5173";
 const secret = "sk-test-secret-1234";
-let server: ReturnType<typeof createServer>;
-let baseUrl: string;
 let persistedStore: { connections: StoredConnection[]; activeId: string | null } = { connections: [], activeId: null };
 
-function apiRequest(
+async function apiRequest(
   path: string,
   options: { method?: string; body?: unknown; origin?: string; host?: string } = {},
 ): Promise<Response> {
-  const headers: Record<string, string> = {};
-  if (options.body !== undefined) headers["Content-Type"] = "application/json";
-  if (options.origin !== undefined) headers.Origin = options.origin;
-  if (options.host !== undefined) headers.Host = options.host;
-  const url = new URL(`${baseUrl}${path}`);
-  return new Promise((resolve, reject) => {
-    const request = sendHttpRequest({
-      hostname: url.hostname,
-      port: url.port,
-      path: `${url.pathname}${url.search}`,
-      method: options.method ?? "GET",
-      headers,
-    }, (response) => {
-      const chunks: Buffer[] = [];
-      response.on("data", (chunk: Buffer) => chunks.push(chunk));
-      response.on("end", () => {
-        const responseHeaders = new Headers();
-        for (const [name, value] of Object.entries(response.headers)) {
-          if (value) responseHeaders.set(name, Array.isArray(value) ? value.join(", ") : value);
-        }
-        resolve(new Response(Buffer.concat(chunks), {
-          status: response.statusCode ?? 500,
-          headers: responseHeaders,
-        }));
-      });
-    });
-    request.on("error", reject);
-    if (options.body !== undefined) request.write(JSON.stringify(options.body));
-    request.end();
-  });
+  const method = options.method?.toUpperCase() ?? "GET";
+  let test = method === "POST"
+    ? supertest(app).post(path)
+    : method === "PUT"
+      ? supertest(app).put(path)
+      : method === "DELETE"
+        ? supertest(app).delete(path)
+        : supertest(app).get(path);
+  if (options.origin !== undefined) test = test.set("Origin", options.origin);
+  if (options.host !== undefined) test = test.set("Host", options.host);
+  if (options.body !== undefined) {
+    test = test.set("Content-Type", "application/json").send(JSON.stringify(options.body));
+  }
+  const result = await test;
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(result.headers)) {
+    if (value !== undefined) headers.set(name, String(value));
+  }
+  return new Response(result.text ?? "", { status: result.status, headers });
 }
 
 async function validateApiKey(apiKey: string): Promise<string> {
@@ -71,24 +57,6 @@ async function validateApiKey(apiKey: string): Promise<string> {
   const result = await response.json() as { validationId: string };
   return result.validationId;
 }
-
-beforeAll(async () => {
-  server = createServer(app);
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address() as AddressInfo;
-      baseUrl = `http://127.0.0.1:${address.port}`;
-      resolve();
-    });
-  });
-});
-
-afterAll(async () => {
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => (error ? reject(error) : resolve()));
-  });
-});
 
 beforeEach(() => {
   vi.restoreAllMocks();
