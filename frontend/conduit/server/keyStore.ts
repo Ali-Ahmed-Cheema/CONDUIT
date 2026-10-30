@@ -23,10 +23,18 @@ const defaultStore: StoreFile = { connections: [], activeId: null };
 
 function encryptionKey(): Buffer {
   const encoded = process.env.CONDUIT_ENCRYPTION_KEY;
-  if (!encoded) throw new Error("CONDUIT_ENCRYPTION_KEY is required. See .env.example.");
+  if (!encoded) {
+    throw new Error("CONDUIT_ENCRYPTION_KEY is required. Set it in .env or generate one with npm run generate:key.");
+  }
   const key = Buffer.from(encoded, "base64");
-  if (key.byteLength !== 32) throw new Error("CONDUIT_ENCRYPTION_KEY must be a base64-encoded 32-byte key.");
+  if (key.byteLength !== 32 || key.toString("base64") !== encoded) {
+    throw new Error("CONDUIT_ENCRYPTION_KEY must be valid base64 encoding exactly 32 bytes. Generate one with npm run generate:key.");
+  }
   return key;
+}
+
+export function validateEncryptionKey(): void {
+  encryptionKey();
 }
 
 export function encryptApiKey(plainText: string): StoredConnection["encryptedKey"] {

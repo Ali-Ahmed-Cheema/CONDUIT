@@ -9,19 +9,19 @@ CONDUIT is a local, single-device multi-provider chat app. The Vite/React client
 
 ## Configure the local API service
 
-If `CONDUIT_ENCRYPTION_KEY` is not already set in `.env`, create a 32-byte encryption key and add it there. Keep this value private and do not commit `.env`.
+Generate a private 32-byte encryption key from the repository root, add it to `frontend\conduit\.env`, and keep the value private. Do not commit `.env`.
 
 ```powershell
-$bytes = [byte[]]::new(32)
-[System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-$key = [Convert]::ToBase64String($bytes)
+# Run from the repository root.
+$key = npm run --silent generate:key
+Set-Location frontend\conduit
 $lines = if (Test-Path .env) { Get-Content .env | Where-Object { $_ -notmatch '^CONDUIT_ENCRYPTION_KEY=' } } else { @() }
 $lines += "CONDUIT_ENCRYPTION_KEY=$key"
 $lines | Set-Content -Encoding ascii .env
-Remove-Variable key, bytes, lines
+Remove-Variable key, lines
 ```
 
-The service listens on `127.0.0.1:3001` and writes encrypted connection records to `data/connections.json`.
+The API exits with a clear error if the key is missing or is not valid base64 encoding of exactly 32 bytes. Keep it safe: losing it makes saved provider connections unreadable. The service listens on `127.0.0.1:3001` and writes encrypted connection records to `data/connections.json`.
 
 ## Configure the lock-screen verifier
 
@@ -58,6 +58,8 @@ npm test
 ```
 
 `npm run start:api` starts only the local API service. The API service must remain available for validation and chat.
+
+The web and reference development servers bind to `127.0.0.1` by default. Set `CONDUIT_EXPOSE=1` before starting a Vite server only when LAN access is intended.
 
 ## Security notes
 

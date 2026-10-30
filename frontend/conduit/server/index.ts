@@ -1,8 +1,17 @@
 import "dotenv/config";
 import express from "express";
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { ChatMessage, ProviderId } from "../src/types";
-import { decryptApiKey, encryptApiKey, readStore, writeStore, type StoredConnection } from "./keyStore";
+import {
+  decryptApiKey,
+  encryptApiKey,
+  readStore,
+  validateEncryptionKey,
+  writeStore,
+  type StoredConnection,
+} from "./keyStore";
 import {
   findProvider,
   getChatModels,
@@ -16,16 +25,74 @@ import {
   redactApiKey,
   type Provider,
 } from "./providers";
+import { apiSecurityHeaders } from "./securityHeaders";
 
 const app = express();
 const port = Number(process.env.PORT ?? 3001);
+export { app };
 const candidates = new Map<
   string,
   { provider: ProviderId; key: string; models: string[]; expiresAt: number }
 >();
+const rateLimits = new Map<string, { count: number; resetAt: number }>();
 
 app.disable("x-powered-by");
+app.use((_request, response, next) => {
+  response.set(apiSecurityHeaders);
+  next();
+});
+app.use((request, response, next) => {
+  const host = request.get("host");
+  try {
+    const hostname = host ? new URL(`http://${host}`).hostname : "";
+    if (hostname !== "localhost" && hostname !== "127.0.0.1") {
+      response.status(403).json({ error: "Requests must use a localhost host name." });
+      return;
+    }
+  } catch {
+    response.status(403).json({ error: "Requests must use a valid localhost host name." });
+    return;
+  }
+  next();
+});
+const allowedOrigins = new Set([
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  `http://localhost:${port}`,
+  `http://127.0.0.1:${port}`,
+]);
+app.use((request, response, next) => {
+  if (request.method !== "GET" && !allowedOrigins.has(request.get("origin") ?? "")) {
+    response.status(403).json({ error: "This request origin is not allowed." });
+    return;
+  }
+  next();
+});
 app.use(express.json({ limit: "64kb" }));
+
+function rateLimit(maximum: number, windowMs: number): express.RequestHandler {
+  return (request, response, next) => {
+    const now = Date.now();
+    const key = `${request.path}:${request.ip}`;
+    let bucket = rateLimits.get(key);
+    if (!bucket || bucket.resetAt <= now) {
+      bucket = { count: 0, resetAt: now + windowMs };
+      rateLimits.set(key, bucket);
+    }
+    if (bucket.count >= maximum) {
+      response.set("Retry-After", String(Math.ceil((bucket.resetAt - now) / 1000)));
+      response.status(429).json({ error: "Too many requests. Try again later." });
+      return;
+    }
+    bucket.count += 1;
+    if (rateLimits.size > 10_000) {
+      for (const [entry, value] of rateLimits) {
+        if (value.resetAt <= now) rateLimits.delete(entry);
+      }
+    }
+    next();
+  };
+}
 
 function publicConnection(connection: StoredConnection) {
   const { encryptedKey: _encryptedKey, ...safe } = connection;
@@ -50,7 +117,7 @@ app.get("/api/connections", async (_request, response, next) => {
   }
 });
 
-app.post("/api/validate", async (request, response) => {
+app.post("/api/validate", rateLimit(10, 60_000), async (request, response) => {
   const { apiKey, probeUnknown } = request.body as { apiKey?: unknown; probeUnknown?: unknown };
   if (typeof apiKey !== "string" || apiKey.trim().length < 8 || apiKey.length > 4096) {
     response.status(400).json({ error: "Enter an API key with at least 8 characters." });
@@ -289,7 +356,7 @@ app.delete("/api/connections/:id", async (request, response, next) => {
   }
 });
 
-app.post("/api/chat/stream", async (request, response) => {
+app.post("/api/chat/stream", rateLimit(30, 60_000), async (request, response) => {
   const { connectionId, model, messages } = request.body as {
     connectionId?: unknown;
     model?: unknown;
@@ -421,6 +488,16 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
   else response.end();
 });
 
-app.listen(port, "127.0.0.1", () => {
-  console.log(`CONDUIT API listening on http://127.0.0.1:${port}`);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  try {
+    validateEncryptionKey();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : "CONDUIT_ENCRYPTION_KEY is invalid.");
+    process.exitCode = 1;
+  }
+  if (process.exitCode !== 1) {
+    app.listen(port, "127.0.0.1", () => {
+      console.log(`CONDUIT API listening on http://127.0.0.1:${port}`);
+    });
+  }
+}

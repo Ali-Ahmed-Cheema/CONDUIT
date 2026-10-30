@@ -6,11 +6,12 @@
   "scripts": {
     "dev": "concurrently -k \"npm:dev:api\" \"npm:dev:web\"",
     "dev:api": "tsx watch server/index.ts",
-    "dev:web": "vite --host 0.0.0.0",
+    "dev:web": "vite",
     "start:api": "tsx server/index.ts",
     "build": "tsc -b && vite build",
     "test": "vitest run",
-    "generate:verify": "node scripts/generate-verifier.mjs"
+    "generate:verify": "node scripts/generate-verifier.mjs",
+    "generate:key": "node scripts/generate-key.mjs"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.17",

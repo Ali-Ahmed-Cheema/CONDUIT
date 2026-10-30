@@ -2,6 +2,7 @@
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { staticSecurityHeaders } from "./server/securityHeaders";
 
 export default defineConfig({
   plugins: [
@@ -22,12 +23,15 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    host: "0.0.0.0",
+    host: process.env.CONDUIT_EXPOSE === "1" ? "0.0.0.0" : "127.0.0.1",
     proxy: {
       "/api": {
         target: "http://127.0.0.1:3001",
         changeOrigin: true,
       },
     },
+  },
+  preview: {
+    headers: staticSecurityHeaders,
   },
 });

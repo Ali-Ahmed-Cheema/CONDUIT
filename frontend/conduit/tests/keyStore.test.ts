@@ -1,7 +1,30 @@
-import { describe, expect, it } from "vitest";
-import { decryptApiKey, encryptApiKey } from "../server/keyStore";
+import { afterEach, describe, expect, it } from "vitest";
+import { decryptApiKey, encryptApiKey, validateEncryptionKey } from "../server/keyStore";
+
+const originalEncryptionKey = process.env.CONDUIT_ENCRYPTION_KEY;
+
+afterEach(() => {
+  if (originalEncryptionKey === undefined) delete process.env.CONDUIT_ENCRYPTION_KEY;
+  else process.env.CONDUIT_ENCRYPTION_KEY = originalEncryptionKey;
+});
 
 describe("encrypted key storage", () => {
+  it("accepts exactly 32 canonical base64-decoded bytes", () => {
+    process.env.CONDUIT_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
+    expect(() => validateEncryptionKey()).not.toThrow();
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["wrong length", Buffer.alloc(31, 7).toString("base64")],
+    ["malformed base64", `${Buffer.alloc(32, 7).toString("base64")}!`],
+  ])("rejects a %s encryption key with a clear error", (_description, key) => {
+    if (key === undefined) delete process.env.CONDUIT_ENCRYPTION_KEY;
+    else process.env.CONDUIT_ENCRYPTION_KEY = key;
+
+    expect(() => validateEncryptionKey()).toThrow("CONDUIT_ENCRYPTION_KEY");
+  });
+
   it("encrypts and decrypts API keys with AES-GCM", () => {
     process.env.CONDUIT_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
     const secret = "sk-private-test-key";

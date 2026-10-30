@@ -7,12 +7,13 @@
     "dev": "npm --prefix frontend/conduit run dev",
     "dev:api": "npm --prefix frontend/conduit run dev:api",
     "dev:web": "npm --prefix frontend/conduit run dev:web",
-    "dev:reference": "vite --host 0.0.0.0 --port 5174",
+    "dev:reference": "vite --port 5174",
     "start:api": "npm --prefix frontend/conduit run start:api",
     "build": "npm --prefix frontend/conduit run build",
     "test": "vitest run",
     "preview": "npm --prefix frontend/conduit run preview",
-    "generate:verify": "npm --prefix frontend/conduit run generate:verify"
+    "generate:verify": "npm --prefix frontend/conduit run generate:verify",
+    "generate:key": "node frontend/conduit/scripts/generate-key.mjs"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.17",
