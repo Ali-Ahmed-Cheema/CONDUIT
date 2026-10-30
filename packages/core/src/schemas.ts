@@ -1,0 +1,213 @@
+import { z } from "zod";
+
+export const ProviderIdSchema = z.enum([
+  "openai",
+  "anthropic",
+  "google",
+  "groq",
+  "openrouter",
+  "huggingface",
+  "mistral",
+]);
+export type ProviderId = z.infer<typeof ProviderIdSchema>;
+
+export const HealthResponseSchema = z.object({ ok: z.literal(true) }).strict();
+export const FeatureFlagEnvironmentSchema = z.object({
+  TYPED_API: z.enum(["0", "1"]).default("0"),
+  AGENT_RUNTIME: z.enum(["0", "1"]).default("0"),
+  LOCAL_MODELS: z.enum(["0", "1"]).default("0"),
+  RETRIEVAL: z.enum(["0", "1"]).default("0"),
+  PLUGINS: z.enum(["0", "1"]).default("0"),
+  ENCRYPTED_SYNC: z.enum(["0", "1"]).default("0"),
+});
+export const VaultSetupSchema = z.object({
+  version: z.literal(1),
+  saltVerify: z.string().regex(/^[0-9a-f]{32}$/i),
+  verifier: z.string().regex(/^[0-9a-f]{64}$/i),
+  saltData: z.string().regex(/^[0-9a-f]{32}$/i),
+});
+export type VaultSetupContract = z.infer<typeof VaultSetupSchema>;
+export const VAULT_BACKUP_FORMAT = "CONDUIT_VAULT_BACKUP";
+export const VAULT_BACKUP_VERSION = 1;
+export const VAULT_BACKUP_KDF_ITERATIONS = 210_000;
+export const VaultBackupSchema = z.object({
+  format: z.literal(VAULT_BACKUP_FORMAT),
+  version: z.literal(VAULT_BACKUP_VERSION),
+  kdf: z.object({
+    name: z.literal("PBKDF2-SHA-256"),
+    iterations: z.literal(VAULT_BACKUP_KDF_ITERATIONS),
+    salt: z.string().regex(/^[0-9a-f]{32}$/i),
+  }),
+  encrypted: z.object({
+    iv: z.string().regex(/^[0-9a-f]{24}$/i),
+    ciphertext: z.string().regex(/^(?:[0-9a-f]{2})+$/i),
+  }),
+});
+export type VaultBackupContract = z.infer<typeof VaultBackupSchema>;
+export type FeatureFlags = {
+  typedApi: boolean;
+  agentRuntime: boolean;
+  localModels: boolean;
+  retrieval: boolean;
+  plugins: boolean;
+  encryptedSync: boolean;
+};
+
+export function resolveFeatureFlags(read: (name: string) => string | undefined): FeatureFlags {
+  const parsed = FeatureFlagEnvironmentSchema.parse({
+    TYPED_API: read("TYPED_API"),
+    AGENT_RUNTIME: read("AGENT_RUNTIME"),
+    LOCAL_MODELS: read("LOCAL_MODELS"),
+    RETRIEVAL: read("RETRIEVAL"),
+    PLUGINS: read("PLUGINS"),
+    ENCRYPTED_SYNC: read("ENCRYPTED_SYNC"),
+  });
+  return {
+    typedApi: parsed.TYPED_API === "1",
+    agentRuntime: parsed.AGENT_RUNTIME === "1",
+    localModels: parsed.LOCAL_MODELS === "1",
+    retrieval: parsed.RETRIEVAL === "1",
+    plugins: parsed.PLUGINS === "1",
+    encryptedSync: parsed.ENCRYPTED_SYNC === "1",
+  };
+}
+
+export const ConnectionStatusSchema = z.enum(["valid", "invalid", "rate-limited"]);
+export const ConnectionSchema = z.object({
+  id: z.string(),
+  provider: ProviderIdSchema,
+  providerName: z.string(),
+  environment: z.string().trim().min(1).max(40).optional(),
+  keyHint: z.string(),
+  models: z.array(z.string()),
+  addedAt: z.string(),
+  status: ConnectionStatusSchema.optional(),
+  lastValidatedAt: z.string().optional(),
+}).strict();
+export type Connection = z.infer<typeof ConnectionSchema>;
+
+export const ConnectionsResponseSchema = z.object({
+  connections: z.array(ConnectionSchema),
+  activeId: z.string().nullable(),
+}).strict();
+export type ConnectionsResponse = z.infer<typeof ConnectionsResponseSchema>;
+
+export const ValidationResultSchema = z.object({
+  validationId: z.string(),
+  provider: ProviderIdSchema,
+  providerName: z.string(),
+  models: z.array(z.string()),
+  chatModels: z.array(z.string()),
+});
+export type ValidationResult = z.infer<typeof ValidationResultSchema>;
+
+export const ChatMessageSchema = z.object({
+  role: z.enum(["system", "user", "assistant"]),
+  content: z.string(),
+  model: z.string().optional(),
+});
+export type ChatMessage = z.infer<typeof ChatMessageSchema>;
+
+export const TokenUsageSchema = z.object({
+  input: z.number().optional(),
+  output: z.number().optional(),
+});
+export type TokenUsage = z.infer<typeof TokenUsageSchema>;
+
+export const WorkspaceChatMessageSchema = z.object({
+  id: z.string().optional(),
+  role: z.enum(["user", "assistant"]),
+  content: z.string(),
+  ts: z.number().finite().optional(),
+  model: z.string().optional(),
+  usage: TokenUsageSchema.optional(),
+  incomplete: z.boolean().optional(),
+  failed: z.boolean().optional(),
+}).passthrough();
+export type WorkspaceChatMessage = z.infer<typeof WorkspaceChatMessageSchema>;
+
+export const ChatConversationSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  createdAt: z.number().finite(),
+  updatedAt: z.number().finite(),
+  connectionId: z.string().nullable().optional(),
+  provider: z.union([ProviderIdSchema, z.literal("unknown")]).optional(),
+  model: z.string(),
+  keyId: z.string().nullable().optional(),
+  pinned: z.boolean().optional(),
+  systemPrompt: z.string().optional(),
+  temperature: z.number().optional(),
+  maxTokens: z.number().optional(),
+  messages: z.array(WorkspaceChatMessageSchema),
+}).passthrough();
+export type ChatConversation = z.infer<typeof ChatConversationSchema>;
+
+export const ApiChatMessageSchema = ChatMessageSchema.extend({
+  role: z.enum(["user", "assistant"]),
+});
+
+export const ChatGenerationOptionsSchema = z.object({
+  systemPrompt: z.string().max(12_000).optional(),
+  temperature: z.number().finite().min(0).max(2).optional(),
+  maxTokens: z.number().int().min(1).max(200_000).optional(),
+});
+export type ChatGenerationOptions = z.infer<typeof ChatGenerationOptionsSchema>;
+
+export const ChatRequestSchema = ChatGenerationOptionsSchema.extend({
+  connectionId: z.string(),
+  model: z.string(),
+  messages: z.array(ApiChatMessageSchema).min(1).max(100),
+});
+
+export const ValidateKeyRequestSchema = z.object({
+  apiKey: z.string().max(4096).refine((value) => value.trim().length >= 8),
+  probeUnknown: z.boolean().optional(),
+  environment: z.string().trim().min(1).max(40).default("Default"),
+});
+
+export const ValidationIdRequestSchema = z.object({
+  validationId: z.string(),
+});
+
+export const ActiveConnectionRequestSchema = z.object({
+  id: z.string().nullable(),
+});
+
+export const ChatStreamEventSchema = z.object({
+  delta: z.string().optional(),
+  model: z.string().optional(),
+  error: z.string().optional(),
+  status: z.number().optional(),
+  done: z.boolean().optional(),
+  usage: TokenUsageSchema.optional(),
+});
+export type ChatStreamEvent = z.infer<typeof ChatStreamEventSchema>;
+
+export const EncryptedApiKeySchema = z.object({
+  iv: z.string(),
+  tag: z.string(),
+  ciphertext: z.string(),
+});
+export const StoredConnectionSchema = ConnectionSchema.extend({
+  encryptedKey: EncryptedApiKeySchema,
+}).passthrough();
+export type StoredConnection = z.infer<typeof StoredConnectionSchema>;
+export const ConnectionStoreSchema = z.object({
+  connections: z.array(StoredConnectionSchema),
+  activeId: z.string().nullable(),
+}).passthrough();
+export type ConnectionStore = z.infer<typeof ConnectionStoreSchema>;
+
+export const VaultDataSchema = z.object({
+  version: z.literal(1),
+  keys: z.array(z.unknown()),
+  chats: z.array(ChatConversationSchema),
+  settings: z.record(z.string(), z.unknown()),
+}).passthrough();
+export type VaultDataContract = z.infer<typeof VaultDataSchema>;
+
+export const ErrorResponseSchema = z.object({
+  error: z.string(),
+  code: z.string().optional(),
+});

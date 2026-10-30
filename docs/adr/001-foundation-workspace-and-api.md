@@ -6,10 +6,13 @@
 
 ## Context
 
-CONDUIT currently has two npm package roots: the primary React/API app in
+CONDUIT began with two npm package roots: the primary React/API app in
 `frontend/conduit` and the credential reference app at repository root. The
-apps have separate lockfiles and Vite configs. The Express API is loopback-only
-and already has Host/Origin checks, security headers, rate limiting, and
+primary app has moved to `apps/web`; the credential-reference app is now the
+`packages/credential-reference` workspace and is shared by the standalone and
+embedded entry points. The repository has a pnpm workspace and lockfile. The
+apps retain separate Vite configs. The Express API is loopback-only and
+already has Host/Origin checks, security headers, rate limiting, and
 provider/stream behavior covered by tests. Existing user data is stored at
 paths relative to the frontend package working directory; physically moving
 the API changes that default unless compatibility is handled explicitly.
@@ -35,8 +38,10 @@ Track 0 must not turn a package extraction or API rewrite into a data migration.
    logic. The credential-reference catalog and view must have one source of
    truth and preserve the current no-network, in-memory-only behavior.
 5. Preserve the existing V3 connection-file location while packaging changes.
-   Any later move must read or migrate the old file without silently
-   reinitializing an empty store.
+   The moved API resolves the repository root from its module path and defaults
+   to `frontend/conduit/data/connections.json`; `CONDUIT_DATA_DIR` is an
+   explicit override. Any later move must read or migrate the old file without
+   silently reinitializing an empty store.
 6. Keep current npm commands available as compatibility wrappers until the
    pnpm bootstrap, tests, and CI use the workspace commands successfully.
 
@@ -96,6 +101,19 @@ move a reviewable rollback.
 - The workspace migration may expose previously implicit root-relative paths;
   tests must use an isolated temporary data directory and include the legacy
   path behavior.
+
+### Dependency review
+
+Zod 4.6.6 is MIT-licensed and is used at shared storage/API boundaries; its
+published package is about 6.15 MB unpacked. The upgrade from Zod 3 was
+required after the moderate audit identified a high-severity advisory affecting
+versions below 4.6.6. Hono 4.13.14 (about 1.30 MB), `@hono/node-server`
+2.1.5 (about 138 KB), and `@hono/zod-openapi` 1.6.3 (about 121 KB) are
+MIT-licensed and server-only; none is included in the browser bundle.
+`openapi-typescript` 7.13.0 is MIT-licensed, about 878 KB unpacked, and
+development-only. These packages avoid native bindings and provide the
+requested runtime contracts, OpenAPI generation, and typed API surface. Their
+exact resolutions are captured in `pnpm-lock.yaml`.
 
 ## Feature-flag and test plan
 

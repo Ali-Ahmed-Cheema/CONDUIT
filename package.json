@@ -1,23 +1,31 @@
 {
-  "name": "conduit-v3",
+  "name": "conduit-workspace",
   "private": true,
   "version": "3.0.0",
   "type": "module",
+  "packageManager": "pnpm@10.34.9",
   "scripts": {
-    "dev": "npm --prefix frontend/conduit run dev",
-    "dev:api": "npm --prefix frontend/conduit run dev:api",
-    "dev:web": "npm --prefix frontend/conduit run dev:web",
-    "dev:reference": "vite --port 5174",
-    "start:api": "npm --prefix frontend/conduit run start:api",
-    "start": "npm --prefix frontend/conduit run start",
-    "build": "npm --prefix frontend/conduit run build",
+    "dev": "corepack pnpm --filter @conduit/web dev",
+    "dev:api": "corepack pnpm --filter @conduit/web dev:api",
+    "dev:web": "corepack pnpm --filter @conduit/web dev:web",
+    "dev:reference": "corepack pnpm --filter @conduit/credential-reference dev",
+    "start:api": "corepack pnpm --filter @conduit/web start:api",
+    "start": "corepack pnpm --filter @conduit/web start",
+    "build": "corepack pnpm --filter @conduit/web build",
+    "build:workspace": "turbo run build --filter=@conduit/web --filter=@conduit/credential-reference",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "lint": "eslint . --max-warnings=0",
-    "typecheck": "tsc -p tsconfig.quality.json && npm --prefix frontend/conduit run typecheck",
-    "preview": "npm --prefix frontend/conduit run preview",
-    "generate:verify": "npm --prefix frontend/conduit run generate:verify",
-    "generate:key": "node frontend/conduit/scripts/generate-key.mjs"
+    "typecheck": "tsc -p tsconfig.quality.json && corepack pnpm --filter @conduit/web typecheck && corepack pnpm --filter @conduit/credential-reference typecheck && corepack pnpm --filter @conduit/ui typecheck && corepack pnpm --filter @conduit/crypto typecheck && corepack pnpm --filter @conduit/storage typecheck && corepack pnpm --filter @conduit/agent typecheck && corepack pnpm --filter @conduit/rag typecheck && corepack pnpm --filter @conduit/plugin-sdk typecheck",
+    "prepare": "husky",
+    "changeset": "changeset",
+    "sbom": "node scripts/generate-sbom.mjs",
+    "preview": "corepack pnpm --filter @conduit/web preview",
+    "generate:verify": "corepack pnpm --filter @conduit/web generate:verify",
+    "generate:key": "node apps/web/scripts/generate-key.mjs",
+    "generate:api": "tsx scripts/generate-openapi.ts && openapi-typescript apps/web/openapi.json -o apps/web/src/generated/openapi.d.ts",
+    "check:api": "corepack pnpm generate:api && git diff --exit-code -- apps/web/openapi.json apps/web/src/generated/openapi.d.ts",
+    "lint-staged": "lint-staged"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.14.17",
@@ -37,6 +45,10 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
+    "@changesets/cli": "3.0.3",
+    "@commitlint/cli": "21.2.4",
+    "@commitlint/config-conventional": "21.2.4",
+    "@cyclonedx/cyclonedx-npm": "6.0.1",
     "@playwright/test": "^1.64.1",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/react": "^16.3.3",
@@ -48,14 +60,26 @@
     "@vitejs/plugin-react": "^4.6.0",
     "concurrently": "^10.0.6",
     "eslint": "^9.0.0",
+    "husky": "9.1.7",
     "jsdom": "^30.1.3",
+    "lint-staged": "17.6.0",
+    "openapi-typescript": "7.13.0",
     "prettier": "^3.0.0",
     "supertest": "^7.3.1",
     "tailwindcss": "^4.3.3",
+    "turbo": "^2.11.10",
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.72.1",
     "vite": "^6.3.5",
     "vite-plugin-pwa": "^2.0.0",
     "vitest": "^4.1.11"
+  },
+  "lint-staged": {
+    "*.{js,mjs,ts,tsx}": [
+      "eslint --fix"
+    ],
+    "*.{md,json,yml,yaml}": [
+      "prettier --write"
+    ]
   }
 }

@@ -1,0 +1,31 @@
+{
+  "name": "@conduit/credential-reference",
+  "private": true,
+  "version": "3.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/App.tsx",
+    "./types": "./src/credentialTypes.ts",
+    "./styles.css": "./src/index.css"
+  },
+  "scripts": {
+    "dev": "vite --config ../../vite.config.ts --port 5174",
+    "build": "tsc -p tsconfig.json && vite build --config ../../vite.config.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "lucide-react": "^0.542.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.0",
+    "vite": "^6.3.5",
+    "vite-plugin-pwa": "^2.0.0"
+  }
+}

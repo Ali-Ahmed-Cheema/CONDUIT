@@ -14,7 +14,7 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "npm --prefix frontend/conduit run dev:web",
+    command: "corepack pnpm --filter @conduit/web dev:web",
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

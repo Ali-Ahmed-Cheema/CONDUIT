@@ -1,54 +1,85 @@
 # CONDUIT V3.0
 
-CONDUIT is a local, single-device multi-provider chat app. From the repository root, the npm scripts launch the full chat client and its local API service in [frontend/conduit](./frontend/conduit/).
+CONDUIT is a local, single-device multi-provider chat app. From the repository root, the pnpm workspace scripts launch the full chat client and its local API service in [apps/web](./apps/web/).
 
 ## Requirements
 
 - Node.js 20 or newer
-- npm
+- Corepack (bundled with supported Node.js releases) and pnpm
 - An API key from a supported provider to send chat messages
 
 ## Run locally
 
 ```powershell
-npm install
-npm run dev
+corepack pnpm install
+corepack pnpm dev
 ```
 
-Open the Vite URL printed in the terminal (normally `http://localhost:5173`). The dev command starts both the chat UI and the local API service. Use `npm run dev:web` and `npm run dev:api` to run them separately.
+Open the Vite URL printed in the terminal (normally `http://localhost:5173`). The dev command starts both the chat UI and the local API service. Use `corepack pnpm dev:web` and `corepack pnpm dev:api` to run them separately.
 
-The chat app's navigation menu includes **Credential reference** for the all-types catalog and session-only forms. Use **API Config** to add provider keys for actual conversations. The standalone reference UI is also available with `npm run dev:reference` (normally `http://localhost:5174`).
+The chat app's navigation menu includes **Credential reference** for the all-types catalog and session-only forms. Use **API Config** to add provider keys for actual conversations. The standalone reference UI is also available with `corepack pnpm dev:reference` (normally `http://localhost:5174`).
 
 ## Set up chat
 
-The local API service reads its encryption key from `frontend/conduit/.env`. Generate a private 32-byte key and add it to that file:
+The local API service reads its encryption key from the repository-root `.env`. Generate a private 32-byte key and add it to that file:
 
 ```powershell
-$key = npm run --silent generate:key
-$envFile = "frontend\conduit\.env"
+$key = corepack pnpm --silent generate:key
+$envFile = ".env"
 $lines = if (Test-Path $envFile) { Get-Content $envFile | Where-Object { $_ -notmatch '^CONDUIT_ENCRYPTION_KEY=' } } else { @() }
 $lines += "CONDUIT_ENCRYPTION_KEY=$key"
 $lines | Set-Content -Encoding ascii $envFile
 Remove-Variable key, lines, envFile
 ```
 
-On first launch, choose a vault password in the app. Existing vaults from earlier releases are detected and migrated after entering the previous password and choosing a new one; the old vault remains intact if the migration cannot be committed. Use **Settings → Change vault password** to re-encrypt an existing vault, or export/import an encrypted backup from Settings.
+The workspace opens without a password. On first launch, the app creates a non-extractable AES-GCM key in the browser's IndexedDB and uses it to encrypt chats and settings. Existing password-protected V3 vault data is not imported into the new workspace and remains encrypted in IndexedDB; export it before upgrading if you need to preserve it.
 
-The exponential password lockout is stored locally in IndexedDB. It is a UX guardrail, not a security boundary. A forgotten password cannot recover the local vault.
+Encrypted backups use a separate password that you choose when exporting and enter when importing. Keep a backup if you need to move the workspace to another browser or device.
 
-After unlocking, open **API Config** and add a real supported provider key. CONDUIT validates it with the provider and stores it encrypted in the local API service. Select the connection and a chat model, return to the chat, and send a message. Provider usage may incur charges.
+Open **API Config** and add a real supported provider key. CONDUIT validates it with the provider and stores it encrypted in the local API service. Select the connection and a chat model, return to the chat, and send a message. Provider usage may incur charges.
+
+API Config has one input for supported AI chat credentials and identifies known
+key formats as you type; the provider is confirmed by validation before the key
+is saved. Unknown formats require consent before CONDUIT checks supported chat
+providers. This is not a universal API credential connector: payment, cloud,
+database, and other non-chat credentials require dedicated provider
+integrations and cannot be used for chat. Label keys with an environment name
+such as Development, Staging, or Production to group them in the saved
+connections list. Existing connections without an environment stay under
+Default; the label organizes keys but does not change provider permissions or
+the provider account's environment.
 
 The local API listens on `127.0.0.1:3001` and the web app normally runs at `http://localhost:5173`.
+
+The experimental typed API is disabled by default. To opt in to its current
+health/OpenAPI endpoints, set `CONDUIT_FEATURE_TYPED_API=1` in the repository
+root `.env` before starting the API. Browser code uses the corresponding
+`VITE_CONDUIT_FEATURE_TYPED_API=1` build flag. The V3 Express API remains the
+default and continues serving existing routes.
 
 ## Build and test
 
 ```powershell
-npm run build
-npm test
+corepack pnpm build
+corepack pnpm test
 ```
 
-`npm run build` builds the chat app. `npm test` runs the repository test suite. Use `npm run preview` to serve the production build locally.
+`corepack pnpm build` builds the chat app. `corepack pnpm test` runs the repository test suite. Use `corepack pnpm preview` to serve the production build locally.
 
 ## Security
 
-Provider credentials are sent only to the local API service for validation and chat, then encrypted at rest. Chat history and settings are encrypted in browser storage while the vault is unlocked. Do not expose the local API service to an untrusted network, and do not commit `.env` files or share vault passwords.
+Provider credentials are sent only to the local API service for validation and chat, then encrypted at rest. Chat history and settings are encrypted in IndexedDB. The device vault key is stored in the same browser profile, so this is not a password or authentication boundary: anyone with access to the browser profile or code running in the app origin may access the workspace. Do not expose the local API service to an untrusted network or commit `.env` files.
+
+## Design system and accessibility
+
+The UI uses shared React components from [packages/ui/src/index.tsx](./packages/ui/src/index.tsx) and app CSS design tokens in [apps/web/src/index.css](./apps/web/src/index.css). The first-run comfort screen and Settings let you change text size, theme, Simple Mode, motion, transparency, and contrast. These preferences are saved with the encrypted local workspace. The interface uses system fonts and makes no remote font or image requests.
+
+Keyboard and screen-reader labels, visible focus rings, reduced-motion and reduced-transparency support, high-contrast surfaces, and responsive navigation are covered by the web tests. The Playwright smoke test runs axe on the chat screen in light and dark themes, then checks the composer at 360, 768, 1280, and 1920 pixels.
+
+![CONDUIT comfort setup](./docs/screenshots/comfort.png)
+
+![CONDUIT chat](./docs/screenshots/chat.png)
+
+![CONDUIT settings](./docs/screenshots/settings.png)
+
+Some limits remain: speech input depends on browser support and microphone permission; the interface is currently English-only; and Safari, Firefox, Edge, 400% browser zoom, and mobile screen readers still need manual verification.

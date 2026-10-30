@@ -1,0 +1,17 @@
+{
+  "name": "@conduit/storage",
+  "private": true,
+  "version": "3.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/vault.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@conduit/core": "workspace:*",
+    "@conduit/crypto": "workspace:*",
+    "idb": "^8.0.4"
+  }
+}

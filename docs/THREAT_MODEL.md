@@ -12,8 +12,7 @@ V4 north star. This is a design document, not a security certification.
    responses, errors, prompts, logs, backups, or telemetry.
 3. Make every external transfer attributable to an explicit user-enabled
    provider, search, sync, plugin, or update action.
-4. Preserve data through upgrades, password changes, imports, and storage
-   migrations.
+4. Preserve data through upgrades, imports, and storage migrations.
 5. Degrade gracefully when offline, GPU-less, without a provider key, or when
    an optional feature is disabled.
 6. Make trust boundaries, permissions, and residual risks understandable to
@@ -21,18 +20,18 @@ V4 north star. This is a design document, not a security certification.
 
 ## Assets
 
-| Asset | Confidentiality / integrity concern |
-|---|---|
-| Conversation messages, titles, system prompts, branches, summaries | Private content; integrity affects answers and audit trail |
-| Provider API keys and provider account metadata | Secret bearer credentials; misuse can incur charges or expose provider data |
-| Vault password, verifier, derived/wrapped keys, recovery material | Unlock/encryption boundary; loss can make data unrecoverable |
-| Imported documents, attachments, embeddings, memories | User/private data; parser and retrieval inputs can be malicious |
-| Plugin manifests, code, permissions, tool configuration | Code execution and access to user data/network |
-| Sync ciphertext, device keys, pairing secrets | Confidentiality, integrity, replay, and revocation |
-| Agent/tool traces, approvals, audit log | Sensitive content and authorization record |
-| Local API port and browser origin | Local network attack surface and request authority |
-| Backups and exports | Portable copies of the complete vault; disclosure enables offline attack |
-| Package registry/build/release artifacts | Supply-chain integrity and update trust |
+| Asset                                                              | Confidentiality / integrity concern                                             |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Conversation messages, titles, system prompts, branches, summaries | Private content; integrity affects answers and audit trail                      |
+| Provider API keys and provider account metadata                    | Secret bearer credentials; misuse can incur charges or expose provider data     |
+| Device-local workspace key, backup password, legacy vault verifier | Workspace encryption, portable backup confidentiality, and legacy data recovery |
+| Imported documents, attachments, embeddings, memories              | User/private data; parser and retrieval inputs can be malicious                 |
+| Plugin manifests, code, permissions, tool configuration            | Code execution and access to user data/network                                  |
+| Sync ciphertext, device keys, pairing secrets                      | Confidentiality, integrity, replay, and revocation                              |
+| Agent/tool traces, approvals, audit log                            | Sensitive content and authorization record                                      |
+| Local API port and browser origin                                  | Local network attack surface and request authority                              |
+| Backups and exports                                                | Portable copies of the complete vault; disclosure enables offline attack        |
+| Package registry/build/release artifacts                           | Supply-chain integrity and update trust                                         |
 
 ## Actors and assumptions
 
@@ -57,25 +56,26 @@ V4 north star. This is a design document, not a security certification.
 
 - Malware or an administrator-level attacker on the user's device.
 - A compromised browser runtime, browser extension with broad page access, or
-  malicious code executing in the unlocked application origin.
+  malicious code executing in the application origin.
 - Coercion, shoulder surfing, physical theft while an unlocked session is
-  visible, or physical access to unlocked devices.
+  visible, or physical access to devices with the workspace open.
 - Provider-side retention, account compromise, or a provider intentionally
   using submitted content outside its stated policy.
 - Availability of the operating system, browser, device storage, network, or
   external services.
 
-These are not reasons to ignore defense-in-depth; they constrain claims. A
-local lock screen is not equivalent to a server-enforced authentication
-boundary, and browser-side encryption cannot defend against active code in the
-same origin after unlock.
+These are not reasons to ignore defense-in-depth; they constrain claims.
+Because the workspace key is stored in the browser profile for password-free
+startup, browser-side encryption cannot defend against someone with profile
+access or active code in the app origin.
 
 ## Trust boundaries and data flow
 
-1. **Browser locked/unlocked boundary:** While locked, the application should
-   not retain the usable vault key in app state. On unlock, the password is
-   derived in a worker and a non-extractable data key is imported. V3 clears
-   the in-memory key on successful lock after a final encrypted save.
+1. **Browser workspace boundary:** Startup opens a password-free workspace
+   using a non-extractable AES-GCM key from IndexedDB. In that device mode the
+   key and ciphertext share the browser profile, so this is storage
+   confidentiality, not an authentication boundary. Existing password-vault
+   records are left encrypted and are not imported.
 2. **Browser to loopback API:** The browser sends validation keys and chat
    payloads to the local Express service. V3 checks Host and mutating-request
    Origin, emits security headers, limits JSON size, avoids CORS, and binds the
@@ -85,10 +85,11 @@ same origin after unlock.
    discovery. Chat sends messages/options and the selected saved key to the
    provider. This is an intentional disclosure to the selected provider.
 4. **Browser persistent storage:** Chat/settings payloads are AES-GCM
-   encrypted before IndexedDB writes. Setup/verifier metadata and lockout
-   counters are also stored in IndexedDB. V3 uses PBKDF2 and keeps one
-   encrypted JSON payload, rather than a random wrapped master key or
-   field-level encryption.
+   encrypted before IndexedDB writes. The non-extractable device key is stored
+   in the same IndexedDB database as device ciphertext. Existing password
+   `setup` and `data` records remain untouched and are not available in the
+   password-free workspace. Encrypted backups use an independent
+   user-selected password.
 5. **API persistent storage:** The local service encrypts saved keys using a
    separate environment-provided 32-byte key and writes ciphertext/metadata
    to a local JSON file. The API key is decrypted only server-side for provider
@@ -118,11 +119,12 @@ same origin after unlock.
 - Provider message/error/stream handling includes API-key redaction. Tests
   check keys are absent from returned errors/prompts and server error logs are
   generic.
-- Browser vault values use AES-GCM; password KDF work runs in a worker;
-  auto-lock and explicit lock exist; migration/password replacement use an
-  atomic IndexedDB transaction.
-- Password lockout is persisted locally and is explicitly documented as a UX
-  guardrail, not an authentication boundary.
+- Device-vault values use AES-GCM with a non-extractable key stored in the
+  same browser profile. This does not protect against profile access or
+  same-origin script execution. New device workspaces do not require a startup
+  password; auto-lock and explicit locking are not currently wired.
+- Password KDF is used to decrypt and encrypt portable backups. Existing
+  password-vault records are not opened by the application.
 - Backups are versioned, encrypted, and tested for round-trip, bad password,
   malformed format, and merge behavior.
 - Credential-reference example values remain in page memory and do not call
@@ -132,23 +134,23 @@ same origin after unlock.
 
 ## Threats, mitigations, and remaining work
 
-| Threat | Current mitigation | V4 requirement / residual risk |
-|---|---|---|
-| Website forges requests to local API | Loopback binding, Host checks, Origin allowlist, no CORS, rate limits | Keep strict allowlists; add tests for browser-specific edge cases and cross-platform behavior; do not treat Host/Origin checks as authentication |
-| Provider key leaks through UI/API/error/log | Key never returned as plaintext; masking/redaction; generic server logging; tests | Add secret-pattern scanning, structured redaction, audit of all plugin/agent/debug paths, and no secret-bearing traces |
-| Offline vault guessing | PBKDF2 210k SHA-256, random per-vault salts | Upgrade via tested PBKDF2-to-Argon2id migration; document parameters and legacy compatibility; backups remain guessable offline |
-| Local process reads provider-key file | AES-GCM file encryption; key supplied via local environment | Desktop OS keychain; fallback key handling; OS permissions; per-key budgets; local admin malware remains out of scope |
-| Vault corruption/tampering | AES-GCM authentication; schema checks; atomic IndexedDB write for initialization | Fuzz import/SSE parsing; versioned migrations with backup/rollback; anti-rollback limits need design |
-| Loss during schema/KDF migration | Atomic V3 migration tests and user-exportable encrypted backup | Snapshot/verify/rollback for every migration; test real V3 fixtures and upgrade on all platforms |
-| Prompt injection in retrieved/tool output | No general agent/tool execution exists in V3 | Track 4 must taint tool output, require per-tool approvals, enforce budgets/allowlists, and test hostile payloads |
-| Malicious plugin reads local data or contacts network | No plugin runtime exists | Capability-only manifest; isolated worker/iframe; signed/reviewed install; no ambient network/storage; tested denial of capabilities |
-| Sync relay reads or alters data | No sync exists | E2E encryption, per-device identity, integrity/authentication, replay protection, revocation, conflict tests; relay must receive ciphertext only |
-| Search/index exposes private content | No RAG/index exists | Encrypt at rest, keep local by default, avoid embedding/content transmission without consent, explain source scope and deletion |
-| Supply-chain or update compromise | npm lockfiles; CI on Node 20/22; static code security controls | Multi-OS CI, license review, audit/OSV, SBOM, signed/provenance releases, reviewed updates |
-| Remote font/CDN/analytics silently tracks users | No analytics requirement; inspect runtime request sources before release | Enforce no remote runtime assets by CSP/tests and add transparent Network Activity view before adding optional outbound integrations |
-| Secret committed to repository history | `.env` patterns are ignored and current root `.env` is absent/untracked | Historical tracked root `.env` path exists in Git history. Rotate every real credential that may have appeared there and arrange history scrubbing; current-tree deletion alone does not revoke secrets |
-| Theft of backup/export | User-chosen backup password and AES-GCM | Strong-password guidance, integrity tests, safe temporary handling; backup file is portable and may be copied outside app control |
-| Lock bypass in browser profile | Password lock and delayed attempts | Treat as privacy UX only; passkeys/recovery improve usability but same-origin active code can still access unlocked data |
+| Threat                                                | Current mitigation                                                                                        | V4 requirement / residual risk                                                                                                                                                                          |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Website forges requests to local API                  | Loopback binding, Host checks, Origin allowlist, no CORS, rate limits                                     | Keep strict allowlists; add tests for browser-specific edge cases and cross-platform behavior; do not treat Host/Origin checks as authentication                                                        |
+| Provider key leaks through UI/API/error/log           | Key never returned as plaintext; masking/redaction; generic server logging; tests                         | Add secret-pattern scanning, structured redaction, audit of all plugin/agent/debug paths, and no secret-bearing traces                                                                                  |
+| Offline backup or legacy-vault guessing               | PBKDF2 210k SHA-256, fresh backup salts; old password vaults remain encrypted                             | Keep backup password guidance and test backup KDF changes; new workspace ciphertext is not protected from someone with browser-profile access                                                           |
+| Local process reads provider-key file                 | AES-GCM file encryption; key supplied via local environment                                               | Desktop OS keychain; fallback key handling; OS permissions; per-key budgets; local admin malware remains out of scope                                                                                   |
+| Vault corruption/tampering                            | AES-GCM authentication; schema checks; atomic IndexedDB write for initialization                          | Fuzz import/SSE parsing; versioned migrations with backup/rollback; anti-rollback limits need design                                                                                                    |
+| Loss during schema/KDF migration                      | Atomic replacement tests, encrypted legacy/device fixture migration, and user-exportable encrypted backup | Add browser-level migration coverage and test upgrades across supported browsers/platforms                                                                                                              |
+| Prompt injection in retrieved/tool output             | No general agent/tool execution exists in V3                                                              | Track 4 must taint tool output, require per-tool approvals, enforce budgets/allowlists, and test hostile payloads                                                                                       |
+| Malicious plugin reads local data or contacts network | No plugin runtime exists                                                                                  | Capability-only manifest; isolated worker/iframe; signed/reviewed install; no ambient network/storage; tested denial of capabilities                                                                    |
+| Sync relay reads or alters data                       | No sync exists                                                                                            | E2E encryption, per-device identity, integrity/authentication, replay protection, revocation, conflict tests; relay must receive ciphertext only                                                        |
+| Search/index exposes private content                  | No RAG/index exists                                                                                       | Encrypt at rest, keep local by default, avoid embedding/content transmission without consent, explain source scope and deletion                                                                         |
+| Supply-chain or update compromise                     | pnpm lockfile; CI configured for Node 20/22 across Linux/macOS/Windows; static code security controls     | Verify cross-OS CI, add audit/OSV and SBOM, signed/provenance releases, reviewed updates                                                                                                                |
+| Remote font/CDN/analytics silently tracks users       | No analytics requirement; inspect runtime request sources before release                                  | Enforce no remote runtime assets by CSP/tests and add transparent Network Activity view before adding optional outbound integrations                                                                    |
+| Secret committed to repository history                | `.env` patterns are ignored and current root `.env` is absent/untracked                                   | Historical tracked root `.env` path exists in Git history. Rotate every real credential that may have appeared there and arrange history scrubbing; current-tree deletion alone does not revoke secrets |
+| Theft of backup/export                                | User-chosen backup password and AES-GCM                                                                   | Strong-password guidance, integrity tests, safe temporary handling; backup file is portable and may be copied outside app control                                                                       |
+| Browser-profile or same-origin access                 | Device key is non-extractable but stored with ciphertext for automatic startup                            | No password barrier by design; rely on OS account protection and keep portable encrypted backups                                                                                                        |
 
 ## V4 security invariants
 
@@ -177,5 +179,6 @@ same origin after unlock.
   not replace credential rotation.
 - If the local `CONDUIT_ENCRYPTION_KEY` is lost, saved connection records may
   be unrecoverable. Keep protected recovery copies outside the repository.
-- If a vault password is lost, encrypted browser data/backup is not recoverable
-  without that password; V4 recovery-key behavior is an explicit design item.
+- Existing password-protected legacy vaults remain encrypted and are not
+  imported into the password-free workspace. The workspace key is tied to its
+  browser profile; keep an encrypted backup for recovery or device migration.

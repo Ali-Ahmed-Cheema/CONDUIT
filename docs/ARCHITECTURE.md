@@ -1,6 +1,6 @@
 # CONDUIT V3 Architecture (V4 Starting Point)
 
-**Status:** Observed current implementation, 2026-10-31
+**Status:** Observed V3 implementation and Track 0 migration state, 2026-10-31
 **Purpose:** Record the system that V4 work must preserve and migrate from. This
 document describes existing code; it is not a claim that the V4 roadmap is
 already implemented.
@@ -11,17 +11,21 @@ CONDUIT is currently a local-first, single-device chat application plus a
 credential-reference workspace. The repository has two Vite/React entry
 points:
 
-- The main chat application is in `frontend/conduit`.
-- The standalone credential-reference application is at the repository root.
-  The main app embeds the same root workspace and catalog through a Shadow DOM
-  host. The catalog is shared in source today, but the application packaging
-  and styles are separate.
+- The main chat application is in `apps/web` (moved as part of Track 0).
+- The credential-reference application is in
+  `packages/credential-reference`. The main app embeds this same workspace and
+  catalog through a Shadow DOM host.
 
-The root `package.json` and `frontend/conduit/package.json` are separate npm
-packages with separate lockfiles. This is not yet a pnpm/Turborepo workspace.
-There are no shared `packages/*` contracts yet. Root scripts delegate the main
-app's development/build commands to `frontend/conduit`; root Vite serves the
-standalone reference application.
+The repository is a pnpm workspace with Turborepo task configuration. The
+main app is `apps/web`; the standalone reference package is
+`packages/credential-reference`. `packages/core` contains Zod-backed shared
+contracts, `packages/providers` contains provider adapters, `packages/ui`
+contains reusable React components, `packages/crypto` contains AES-GCM
+primitives, and `packages/storage` owns the IndexedDB vault. App-specific CSS
+tokens and component styling remain in `apps/web/src/index.css`. An opt-in
+Hono route currently exposes health and OpenAPI metadata, and the generated
+client types are checked in; the existing Express routes remain the default
+and have not yet been migrated to Hono.
 
 ```text
 Browser
@@ -38,7 +42,8 @@ Browser
   External model provider
 
 Standalone credential reference (127.0.0.1:5174)
-  Root React/Vite app; entered example values remain in page memory.
+  @conduit/credential-reference React/Vite package; entered example values
+  remain in page memory.
 ```
 
 The main web development server and the local API are distinct processes.
@@ -53,11 +58,12 @@ interfaces. The Express service binds only to `127.0.0.1`.
 The main React app uses React Router's `HashRouter`, lazy-loaded page modules,
 Zustand stores, TypeScript, Vite, Tailwind CSS, and application CSS. Routes
 include chat, history, API configuration, settings, About, and the embedded
-credential reference. The lock screen gates the normal application shell.
+credential reference. On startup, the app opens the local device vault and shows
+the comfort setup on first use. Workspace startup does not require a password.
 
-The primary store contains lock state, theme, notification preference,
-auto-lock interval, connection metadata, active connection/model, conversations,
-and active conversation IDs. Chat content and settings are persisted to the
+The primary store contains workspace readiness, theme, notification
+preference, connection metadata, active connection/model, conversations, and
+active conversation IDs. Chat content and settings are persisted to the
 browser vault. Connection secrets do not live in the browser app store.
 
 Chat requests send only the most recent 30 messages, subject to a 48,000
@@ -76,32 +82,32 @@ legacy payload is normalized to schema 1 and written back after successful
 decryption.
 
 Each vault payload is JSON encrypted with Web Crypto AES-GCM using a random
-12-byte IV. New installations create a random password verifier salt and data
-salt in the IndexedDB `setup` record. Password hashing and data-key derivation
-use PBKDF2-HMAC-SHA-256 with 210,000 iterations in a Web Worker. The data key is
-non-extractable after import and held in application memory while unlocked.
-The verifier and vault data are separate records. Lockout state is persisted in
-IndexedDB; the old localStorage lockout value has a tested one-time migration.
+12-byte IV. New password-free workspaces create a non-extractable AES-GCM key
+and store it with the encrypted `device-data` record in IndexedDB. This avoids
+a password prompt but is not a security boundary against someone with access
+to the browser profile or code running in the app origin.
 
-First-run setup requires a password of at least 12 characters. Older V3 vaults
-without an in-app setup record use a legacy verifier/salt configuration. After
-the existing password is verified, the app decrypts the old data and writes
-the new setup and ciphertext in one IndexedDB transaction. Existing tests
-assert that a failed atomic replacement leaves the prior data/setup intact.
-Password changes follow the same decrypt-then-atomic-replace pattern. A future
-key-hierarchy migration must preserve this compatibility path and the
-transaction/backup guarantees.
+Existing password-based vaults use the `setup` and `data` records. Startup
+does not import or modify these records; they remain encrypted in IndexedDB and
+are not available in the password-free workspace. Export legacy data before
+upgrading if it must be preserved.
+
+Workspaces without password records use a non-extractable AES-GCM device key
+stored in IndexedDB alongside `device-data`. This avoids a password prompt but
+is not a security boundary against someone with access to the browser profile
+or code running in the app origin.
 
 Encrypted backups use JSON format `CONDUIT_VAULT_BACKUP`, format version 1,
 PBKDF2-SHA-256, 210,000 iterations, a fresh salt, and AES-GCM ciphertext.
+Backups use a user-selected password independent of workspace startup.
 Imports support merge and replace. Merge replaces duplicate record IDs with
 imported versions while retaining unmatched local records. Current tests cover
-round-trip confidentiality, incorrect passwords, invalid formats, merge
-semantics, old logical payload migration, and failed setup replacement.
+round-trip confidentiality, incorrect backup passwords, invalid formats,
+merge semantics, legacy vault compatibility, and device-key persistence.
 
 ### Local API and provider calls
 
-`frontend/conduit/server/index.ts` exports an Express app for tests and starts
+`apps/web/server/index.ts` exports an Express app for tests and starts
 the server on loopback. `server/securityHeaders.ts` defines API and static
 response headers. The API middleware:
 
@@ -132,7 +138,8 @@ chat suitability. Streaming provider formats are normalized into text,
 model, usage, error, and completion events consumed by `src/api.ts`.
 
 `server/keyStore.ts` stores connection metadata and AES-256-GCM encrypted API
-keys in `frontend/conduit/data/connections.json`. The key is a canonical
+keys in the legacy-compatible `frontend/conduit/data/connections.json` path.
+An explicit `CONDUIT_DATA_DIR` overrides that path. The key is a canonical
 Base64-encoded 32-byte `CONDUIT_ENCRYPTION_KEY`, loaded from environment
 configuration. Each key ciphertext uses its own random 12-byte IV and GCM tag.
 Writes use a temporary file followed by rename and set restrictive file mode
@@ -146,33 +153,33 @@ other network requests.
 
 ## Credential-reference workspace
 
-The root app uses React, TypeScript, Vite, and its own stylesheet. Its 16
-credential examples are defined in `src/credentialTypes.ts`; the
-`CredentialWorkspace` in `src/App.tsx` provides search, group filters,
+The `@conduit/credential-reference` package uses React, TypeScript, Vite, and
+its own stylesheet. Its 16 credential examples are defined in
+`packages/credential-reference/src/credentialTypes.ts`; the
+`CredentialWorkspace` in `packages/credential-reference/src/App.tsx` provides search, group filters,
 credential entry forms, secret reveal controls, removal, and educational
 security/HTTP response guidance. Values are held in React state only and are
 not sent to an API or persisted. The main app's `src/pages/Credentials.tsx`
-mounts this workspace into a Shadow DOM and injects its stylesheet.
-
-V4 Track 0 proposes a single shared credential-reference package as the
-replacement for the current root-app packaging. The migration should retain
-the catalog's privacy promise and avoid introducing a second copy.
+mounts this workspace into a Shadow DOM and injects the package stylesheet.
+The package also provides the standalone app at `127.0.0.1:5174`; both entry
+points use the same component and catalog source.
 
 ## Build, test, and delivery
 
-Current commands are npm scripts:
+Current commands are pnpm workspace scripts:
 
-- `npm run dev`: start main UI and API.
-- `npm run dev:reference`: start the standalone reference UI.
-- `npm run lint`, `npm run typecheck`, `npm test`, `npm run test:e2e`,
-  `npm run build`.
+- `pnpm dev`: start main UI and API.
+- `pnpm dev:reference`: start the standalone reference UI.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e`,
+  `pnpm build`.
 
-Root CI currently tests Node 20 and 22 on Ubuntu, runs lint/typecheck/unit
-tests, installs Playwright Chromium, runs e2e, then builds. Cross-OS CI,
-workspace-aware package tooling, dependency auditing, SBOM, and OSV scanning
-are planned, not current guarantees. The current unit suite uses Vitest; the
-Playwright smoke test mocks provider/API network requests and covers first
-setup, chat, lock/unlock persistence, accessibility, and a narrow viewport.
+CI is configured for Node 20/22 on Linux, macOS, and Windows and runs
+workspace install, lint/typecheck/unit/e2e tests, generated API verification,
+and build. The cross-OS matrix has not yet been observed green. The dependency
+audit currently reports one low-severity advisory; the PNPM-compatible
+CycloneDX generation and OSV workflow are configured. The Playwright smoke test
+mocks provider/API network requests and covers automatic workspace startup,
+chat persistence, accessibility, and a narrow viewport.
 
 ## Important compatibility contracts
 
@@ -191,8 +198,11 @@ setup, chat, lock/unlock persistence, accessibility, and a narrow viewport.
 
 ## Gaps to address in V4
 
-- Two npm applications are not a shared package workspace; types and contracts
-  are currently handwritten and are not runtime schema-validated everywhere.
+- `packages/core`, `packages/providers`, `packages/crypto`, `packages/storage`,
+  `packages/ui`, and `packages/credential-reference` are extracted. Agent,
+  RAG, and plugin SDK packages currently contain contract scaffolding only;
+  their runtimes remain unimplemented. Only selected API and storage
+  boundaries use shared runtime schemas, and API route parity is incomplete.
 - Browser persistence is an encrypted JSON payload, not a queryable relational
   store; retrieval and large-scale full-text/vector search do not exist.
 - PBKDF2 and legacy static verifier compatibility remain; no wrapped random

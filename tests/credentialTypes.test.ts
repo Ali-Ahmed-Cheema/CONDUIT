@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { types } from "../src/credentialTypes";
+import { types } from "../packages/credential-reference/src/credentialTypes";
 
 describe("credential type catalog", () => {
   it("provides unique, complete inputs for every listed credential type", () => {

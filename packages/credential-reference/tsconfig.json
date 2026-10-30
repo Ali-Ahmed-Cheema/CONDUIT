@@ -1,0 +1,7 @@
+{
+  "extends": "../../tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "../../node_modules/.tmp/credential-reference.tsbuildinfo"
+  },
+  "include": ["src"]
+}
