@@ -9,6 +9,7 @@ export interface Provider {
   id: ProviderId;
   name: string;
   baseUrl: string;
+  keyPriority: number;
   matchesKey: (key: string) => boolean;
   listModels: (key: string, signal: AbortSignal) => Promise<ModelRecord[]>;
   chat: (
@@ -141,10 +142,12 @@ const openAiCompatible = (
   name: string,
   baseUrl: string,
   matchesKey: (key: string) => boolean,
+  keyPriority: number,
 ): Provider => ({
   id,
   name,
   baseUrl,
+  keyPriority,
   matchesKey,
   async listModels(key, signal) {
     const response = await fetch(`${baseUrl}/models`, {
@@ -194,12 +197,37 @@ const openAiCompatible = (
   },
 });
 
+const openAiCompatibleConfigs: Array<{
+  id: ProviderId;
+  name: string;
+  baseUrl: string;
+  matchesKey: (key: string) => boolean;
+  keyPriority: number;
+}> = [
+  { id: "openai", name: "OpenAI", baseUrl: "https://api.openai.com/v1", matchesKey: (key) => key.startsWith("sk-"), keyPriority: 0 },
+  { id: "groq", name: "Groq", baseUrl: "https://api.groq.com/openai/v1", matchesKey: (key) => key.startsWith("gsk_"), keyPriority: 1 },
+  { id: "openrouter", name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1", matchesKey: (key) => key.startsWith("sk-or-"), keyPriority: 1 },
+  {
+    id: "huggingface",
+    name: "Hugging Face",
+    baseUrl: "https://router.huggingface.co/v1",
+    matchesKey: (key) => key.startsWith("hf_"),
+    keyPriority: 1,
+  },
+  { id: "mistral", name: "Mistral AI", baseUrl: "https://api.mistral.ai/v1", matchesKey: () => false, keyPriority: 1 },
+];
+
+const openAiCompatibleProviders = openAiCompatibleConfigs.map(({ id, name, baseUrl, matchesKey, keyPriority }) =>
+  openAiCompatible(id, name, baseUrl, matchesKey, keyPriority),
+);
+
 const providers: Provider[] = [
-  openAiCompatible("openai", "OpenAI", "https://api.openai.com/v1", (key) => key.startsWith("sk-")),
+  ...openAiCompatibleProviders,
   {
     id: "anthropic",
     name: "Anthropic",
     baseUrl: "https://api.anthropic.com/v1",
+    keyPriority: 1,
     matchesKey: (key) => key.startsWith("sk-ant-"),
     async listModels(key, signal) {
       const response = await fetch("https://api.anthropic.com/v1/models", {
@@ -253,6 +281,7 @@ const providers: Provider[] = [
     id: "google",
     name: "Google Gemini",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    keyPriority: 1,
     matchesKey: (key) => key.startsWith("AIza"),
     async listModels(key, signal) {
       const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models", {
@@ -308,20 +337,12 @@ const providers: Provider[] = [
       return usageFields(usage, "promptTokenCount", "candidatesTokenCount");
     },
   },
-  openAiCompatible("groq", "Groq", "https://api.groq.com/openai/v1", (key) => key.startsWith("gsk_")),
-  openAiCompatible("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", (key) => key.startsWith("sk-or-")),
-  openAiCompatible("huggingface", "Hugging Face", "https://router.huggingface.co/v1", (key) => key.startsWith("hf_")),
-  openAiCompatible("mistral", "Mistral AI", "https://api.mistral.ai/v1", () => false),
 ];
 
 export function getProviderHint(key: string): Provider | undefined {
-  if (key.startsWith("sk-ant-")) return providers.find((provider) => provider.id === "anthropic");
-  if (key.startsWith("sk-or-")) return providers.find((provider) => provider.id === "openrouter");
-  if (key.startsWith("hf_")) return providers.find((provider) => provider.id === "huggingface");
-  if (key.startsWith("gsk_")) return providers.find((provider) => provider.id === "groq");
-  if (key.startsWith("AIza")) return providers.find((provider) => provider.id === "google");
-  if (key.startsWith("sk-")) return providers.find((provider) => provider.id === "openai");
-  return undefined;
+  return providers
+    .filter((provider) => provider.matchesKey(key))
+    .sort((first, second) => second.keyPriority - first.keyPriority)[0];
 }
 
 export function getProviders(): Provider[] {

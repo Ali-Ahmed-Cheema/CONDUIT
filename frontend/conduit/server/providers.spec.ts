@@ -124,6 +124,19 @@ describe("Hugging Face provider", () => {
   });
 });
 
+describe("provider registry", () => {
+  it.each([
+    ["sk-openai-test-key", "openai"],
+    ["sk-ant-test-key", "anthropic"],
+    ["AIza-test-key", "google"],
+    ["gsk_test-key", "groq"],
+    ["sk-or-test-key", "openrouter"],
+    ["hf_test-key", "huggingface"],
+  ] as const)("identifies %s as %s without broad-prefix collisions", (key, providerId) => {
+    expect(getProviderHint(key)?.id).toBe(providerId);
+  });
+});
+
 describe("provider generation options and token usage", () => {
   afterEach(() => vi.unstubAllGlobals());
 

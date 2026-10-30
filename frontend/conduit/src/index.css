@@ -853,6 +853,12 @@ textarea {
   font-size: 0.8rem;
 }
 
+.success-alert {
+  margin: 0;
+  color: #15803d;
+  font-size: 0.8rem;
+}
+
 .lockout-note {
   margin: 0;
   text-align: center;

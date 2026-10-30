@@ -99,7 +99,7 @@ export async function streamChat(
   });
   if (!response.ok || !response.body) {
     const body = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `Chat request failed (${response.status})`);
+    throw new ApiRequestError(body?.error ?? `Chat request failed (${response.status})`, undefined, response.status);
   }
 
   const reader = response.body.getReader();
@@ -118,10 +118,11 @@ export async function streamChat(
       delta?: string;
       model?: string;
       error?: string;
+      status?: number;
       done?: boolean;
       usage?: TokenUsage;
     };
-    if (parsed.error) throw new Error(parsed.error);
+    if (parsed.error) throw new ApiRequestError(parsed.error, undefined, parsed.status);
     if (parsed.delta) onDelta(parsed.delta);
     if (parsed.model) onModel?.(parsed.model);
     if (parsed.usage) onUsage?.(parsed.usage);

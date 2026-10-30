@@ -10,6 +10,8 @@ export interface StoredConnection {
   keyHint: string;
   models: string[];
   addedAt: string;
+  status?: "valid" | "invalid" | "rate-limited";
+  lastValidatedAt?: string;
   encryptedKey: { iv: string; tag: string; ciphertext: string };
 }
 

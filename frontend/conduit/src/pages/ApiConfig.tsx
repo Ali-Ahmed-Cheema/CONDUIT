@@ -37,6 +37,7 @@ export function ApiConfigPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -76,6 +77,7 @@ export function ApiConfigPage() {
 
     setBusy(true);
     setError("");
+    setStatusMessage("");
     try {
       const saveWithValidation = async () => {
         const validation = await validateKey(trimmed, !hintedProvider && allowUnknownProbe);
@@ -94,6 +96,7 @@ export function ApiConfigPage() {
       setActiveConnectionId(result.activeId);
       const active = result.connections.find((connection) => connection.id === result.activeId);
       setActiveModel(active?.models[0] ?? "");
+      setStatusMessage(active ? `${active.providerName} connection validated and saved.` : "Connection saved.");
       setDraft("");
       setAllowUnknownProbe(false);
       setReplacingId(null);
@@ -107,12 +110,14 @@ export function ApiConfigPage() {
   const activate = async (id: string) => {
     setBusy(true);
     setError("");
+    setStatusMessage("");
     try {
       const result = await setActiveConnection(id);
       setConnections(result.connections);
       setActiveConnectionId(result.activeId);
       const active = result.connections.find((connection) => connection.id === result.activeId);
       setActiveModel(active?.models[0] ?? "");
+      setStatusMessage(active ? `${active.providerName} is now active.` : "No connection is active.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not activate this API connection.");
     } finally {
@@ -124,12 +129,14 @@ export function ApiConfigPage() {
     if (!window.confirm("Delete this saved API connection?")) return;
     setBusy(true);
     setError("");
+    setStatusMessage("");
     try {
       const result = await removeConnection(id);
       setConnections(result.connections);
       setActiveConnectionId(result.activeId);
       const active = result.connections.find((connection) => connection.id === result.activeId);
       setActiveModel(active?.models[0] ?? "");
+      setStatusMessage("API connection deleted.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not delete this API connection.");
     } finally {
@@ -140,13 +147,32 @@ export function ApiConfigPage() {
   const refresh = async (id: string) => {
     setBusy(true);
     setError("");
+    setStatusMessage("");
     try {
       const result = await refreshConnection(id);
       setConnections(result.connections);
       setActiveConnectionId(result.activeId);
       const active = result.connections.find((connection) => connection.id === result.activeId);
       if (active && !active.models.includes(activeModel)) setActiveModel(active.models[0] ?? "");
+      const refreshed = result.connections.find((connection) => connection.id === id);
+      setStatusMessage(
+        refreshed
+          ? `Refreshed ${refreshed.models.length} chat model${refreshed.models.length === 1 ? "" : "s"} for ${refreshed.providerName}.`
+          : "Connection models refreshed.",
+      );
     } catch (reason) {
+      if (reason instanceof ApiRequestError) {
+        const status = reason.status === 401 || reason.status === 403
+          ? "invalid"
+          : reason.status === 429
+            ? "rate-limited"
+            : undefined;
+        if (status) {
+          setConnections(useAppStore.getState().connections.map((connection) =>
+            connection.id === id ? { ...connection, status } : connection,
+          ));
+        }
+      }
       setError(reason instanceof Error ? reason.message : "Could not refresh this API connection.");
     } finally {
       setBusy(false);
@@ -206,6 +232,7 @@ export function ApiConfigPage() {
         )}
         <p className="counter">({connections.length}/10 saved)</p>
         {error && <p className="error-alert" role="alert">{error}</p>}
+        {statusMessage && <p className="success-alert" role="status">{statusMessage}</p>}
 
         <div className="connection-list" aria-live="polite">
           {loading ? (
@@ -224,8 +251,17 @@ export function ApiConfigPage() {
                   {isActive && <span className="chip"><Check size={12} /> Active</span>}
                 </div>
                 <div className="key-status-row">
-                  <span className="status-dot working" />
-                  <span>Validated · {connection.models.length} chat model{connection.models.length === 1 ? "" : "s"}</span>
+                  <span className={`status-dot ${connection.status === "invalid" || connection.status === "rate-limited" ? connection.status : "working"}`} />
+                  <span>
+                    {connection.status === "invalid"
+                      ? "Invalid key"
+                      : connection.status === "rate-limited"
+                        ? "Rate limited"
+                        : "Valid"}
+                    {" · "}{connection.models.length} chat model{connection.models.length === 1 ? "" : "s"}
+                    {" · Last validated "}
+                    {new Date(connection.lastValidatedAt ?? connection.addedAt).toLocaleString()}
+                  </span>
                 </div>
                 <label className="model-select-label">
                   Default model

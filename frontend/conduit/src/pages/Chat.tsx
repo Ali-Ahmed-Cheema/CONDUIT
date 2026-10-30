@@ -2,7 +2,7 @@ import { Copy, Download, Pencil, Pin, PinOff, RefreshCw, SendHorizonal, Square, 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Link } from "react-router-dom";
-import { getConnections, limitChatHistory, streamChat } from "../api";
+import { ApiRequestError, getConnections, limitChatHistory, streamChat } from "../api";
 import { Header } from "../components/Header";
 import { MarkdownContent } from "../components/MarkdownContent";
 import { estimateTokens, makeTokenSummary } from "../lib/tokens";
@@ -253,6 +253,18 @@ export function ChatPage() {
       setStatus("sent");
       if (soundOn) beep();
     } catch (reason) {
+      if (reason instanceof ApiRequestError) {
+        const status = reason.status === 401 || reason.status === 403
+          ? "invalid"
+          : reason.status === 429
+            ? "rate-limited"
+            : undefined;
+        if (status) {
+          setConnections(useAppStore.getState().connections.map((connection) =>
+            connection.id === activeConnection.id ? { ...connection, status } : connection,
+          ));
+        }
+      }
       updateConversation(conversationId, (item) => ({
         ...item,
         messages: item.messages.map((message) =>
