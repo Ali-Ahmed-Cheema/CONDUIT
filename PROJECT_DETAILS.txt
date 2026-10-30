@@ -1,0 +1,578 @@
+CONDUIT — PROJECT DETAILS
+========================
+
+Document scope
+--------------
+This document describes the tracked source and configuration present in this
+repository when it was inspected. It is a practical project guide, not a copy
+of every source line. Runtime state, generated build output, installed
+dependencies, ignored files, and secret values are not reproduced here.
+
+Project identity
+----------------
+Name: CONDUIT V3.0
+Repository: Ali-Ahmed-Cheema/CONDUIT
+Package version: 3.0.0
+License: MIT (see LICENSE)
+Primary language: TypeScript (React client and Node.js API); one JavaScript
+setup script uses the .mjs extension.
+Purpose: A local, single-device multi-provider AI chat workspace, accompanied
+by a separate session-only API credential reference/input demonstration.
+
+There are two Vite applications in the repository:
+
+1. The main application lives in frontend/conduit. It contains the chat UI,
+   lock screen, encrypted browser vault, and local API service.
+2. The credential reference application lives at the repository root. It
+   catalogs common credential types and demonstrates entering sample
+   credential values in browser memory only.
+
+The root application reuses the credential catalog and workspace inside the
+main app at its Credential reference route. The embedded workspace is isolated
+with a Shadow DOM root and its own injected stylesheet. It remains a reference
+tool: its sample entries are not the API keys used by the chat backend.
+
+Architecture at a glance
+------------------------
+Browser:
+  React 19 + TypeScript + Vite. The main app uses HashRouter, lazy-loaded
+  pages, Zustand in-memory state, IndexedDB for the encrypted conversation
+  vault, Web Crypto for password-derived keys and AES-GCM encryption, and a
+  Web Worker for PBKDF2 computation.
+
+Local API service:
+  Express 5 + TypeScript, started with tsx. It binds only to 127.0.0.1 and
+  listens on PORT (default 3001). It validates provider credentials, stores
+  provider keys encrypted on disk, and proxies provider model/chat requests.
+
+Development proxy:
+  Vite normally serves the main UI on port 5173 and forwards /api requests to
+  http://127.0.0.1:3001. The main Vite server and API service are separate
+  processes when running the combined development command.
+
+Provider services:
+  Chat messages and credentials needed for validation/chat are sent from the
+  local API service to the selected external provider. This is necessary for
+  provider functionality; the credential-reference-only application makes no
+  such calls.
+
+Requirements
+------------
+- Node.js 20 or newer.
+- npm.
+- A valid API key for a supported provider to send actual chat requests.
+- A browser with Web Crypto, IndexedDB, Web Workers, Fetch streaming, and
+  clipboard support for the corresponding features.
+
+Install and run
+---------------
+From the repository root:
+
+  npm install
+  npm run dev
+
+The combined command starts the API and main web app. Open the Vite URL
+reported in the terminal (normally http://localhost:5173). The Vite server is
+configured for host 0.0.0.0, port 5173, and strict port selection. The API
+service binds to 127.0.0.1, default port 3001.
+
+Run services separately:
+
+  npm run dev:api       Start the API with tsx watch.
+  npm run dev:web       Start the main Vite client.
+  npm run start:api     Start the API without watch mode.
+
+Run the standalone credential reference:
+
+  npm run dev:reference
+
+This starts the root Vite app on port 5174, host 0.0.0.0. It is independent of
+the main app/API process and is useful for browsing the credential catalog.
+
+Build and tests:
+
+  npm run build
+  npm test
+  npm run preview
+
+The root build script delegates to frontend/conduit. The frontend build runs
+TypeScript project build mode and then Vite production bundling. The root test
+script runs Vitest from the repository. The frontend package also defines its
+own test command for tests run from that package.
+
+Root package scripts
+--------------------
+- dev: start frontend/conduit's combined development API and web processes.
+- dev:api: delegate to the frontend API development command.
+- dev:web: delegate to the frontend Vite command.
+- dev:reference: start root Vite at 0.0.0.0:5174.
+- start:api: delegate to the frontend API production/start command.
+- build: build the frontend/conduit app.
+- test: run Vitest from the repository root.
+- preview: delegate to the frontend production preview script.
+- generate:verify: delegate to the password-verifier generator.
+
+The root package is an ES module package named conduit-v3, version 3.0.0. The
+frontend package has matching name/version and its own scripts, dependencies,
+and package lock. Both package manifests are present; install from the root as
+documented in README.md.
+
+Environment and local setup
+---------------------------
+Environment templates are in .env.example and frontend/conduit/.env.example.
+They document:
+
+- CONDUIT_ENCRYPTION_KEY: Base64 encoding of exactly 32 random bytes, used by
+  the API service for AES-256-GCM encryption of saved provider API keys.
+- PORT: optional local API port; default is 3001.
+
+The frontend API imports dotenv/config and reads its .env from its process
+working directory. The frontend README describes creating
+frontend/conduit/.env. Keep all real .env files private and out of version
+control. A root .env path is present and tracked in this checkout; its contents
+were not inspected or reproduced here. Verify that it contains no live
+credentials before sharing or publishing the repository.
+
+The lock screen compares a password against the PBKDF2 verifier configured in
+frontend/conduit/src/crypto/config.ts. To generate replacement salts and a
+verifier, set CONDUIT_PW in the environment and run:
+
+  Set-Location frontend\conduit
+  $env:CONDUIT_PW = Read-Host "Choose a private vault password"
+  npm run generate:verify
+  Remove-Item Env:CONDUIT_PW
+
+Copy the generator's output into the corresponding KDF_CONFIG fields in
+src/crypto/config.ts. The script prints salts and a verifier; it does not
+print or persist a plaintext password. Do not share or commit the password or
+environment values. Changing the password-derived data key does not migrate
+old vault data: export or clear data encrypted under the old password before
+replacing the verifier/salts.
+
+Chat setup flow
+---------------
+1. Install dependencies and start the API plus web client.
+2. Unlock the browser vault with the password associated with the configured
+   verifier.
+3. Open API Config.
+4. Paste a real API key. Keys are validated against the provider before they
+   can be saved. If the key format does not identify a provider, explicitly
+   consent to checking it against supported providers.
+5. Select/activate the connection and a conversational model.
+6. Return to the chat, enter a prompt, and send it. Provider usage can incur
+   charges under the provider account.
+
+Supported chat providers
+------------------------
+- OpenAI
+- Anthropic
+- Google Gemini
+- Groq
+- OpenRouter
+- Hugging Face Inference Providers
+- Mistral AI
+
+The provider adapters and endpoints are implemented in
+frontend/conduit/server/providers.ts. Most integrations use OpenAI-compatible
+chat request/response shapes; Anthropic and Google Gemini have provider-
+specific request and stream handling. Hugging Face uses its Inference
+Providers router and requires an Inference Providers-enabled hf_ token.
+Mistral keys have no uniquely recognized prefix in this app; users must
+explicitly consent to unknown-key probing for the service to check supported
+providers. An API key from an unlisted provider is not guaranteed to work.
+
+Provider detection recognizes the formats implemented in the code, including
+sk-ant- (Anthropic), sk-or- (OpenRouter), hf_ (Hugging Face), gsk_ (Groq),
+AIza (Google), and sk- (OpenAI). Mistral is found through consent-based
+probing. Unknown credentials are tested in the order disclosed by the
+provider service. The API refuses placeholder keys, trims whitespace, and
+requires keys from 8 to 4096 characters.
+
+Model discovery returns provider model IDs and classifies chat-capable models.
+The classifier uses provider metadata where available and name-based
+exclusions/inclusions for common embedding, audio, image, moderation, and
+other non-chat models. Only chat models are offered to the chat UI. Refresh
+validation re-queries the provider and refreshes the saved chat model list.
+
+Main application routes and behavior
+------------------------------------
+Routes use HashRouter and are only rendered after the local lock screen is
+unlocked. Page modules are loaded lazily, with a Loading... fallback.
+
+Route / (Chat):
+  Shows the active provider/model, messages, composer, and status. Starts a
+  conversation when needed, titles it from the first user prompt (up to 72
+  characters), and records the connection and model used. Chat requests are
+  streamed. Enter sends; Shift+Enter inserts a newline. A Stop button aborts
+  the current request. The UI can auto-scroll while the reader is near the
+  bottom, displays estimated token count, and can beep on successful response
+  when sound is enabled. Assistant content renders Markdown and GitHub-flavored
+  Markdown. Users can copy the full response, a code block, inline code, or a
+  rendered table (as tab-separated values).
+
+Route /history (History):
+  Sorts conversations newest-first, groups them as Today, Yesterday, Previous
+  7 Days, or month/year, and searches titles and message contents. Selecting a
+  conversation returns to chat. Deletion requires confirmation and is
+  permanent from the local vault.
+
+Route /api-config (API Config):
+  Loads saved connections from the local API; validates/adds keys, replaces a
+  key, activates a saved connection, refreshes model validation, or deletes a
+  connection. The API allows at most 10 saved connections. Key input is
+  treated as a password field. Unknown key probing requires a consent checkbox.
+  The page only receives masked key hints, never saved plaintext provider keys.
+
+Route /credentials (Credential reference):
+  Embeds the root credential workspace in a Shadow DOM. Its catalog values are
+  distinct from the real API Config connections. The catalog component state
+  is session/page memory and is lost on reload.
+
+Route /settings (Settings):
+  Changes Light/Dark/System theme, notification sound, and inactivity auto-lock
+  (1, 5, 15 minutes, or Never). Also provides Lock now and Clear all data.
+  Clear all data confirms, requests deletion of saved API connections, clears
+  the browser vault and lockout record, and resets in-memory app settings.
+
+Route /about (About):
+  Describes the local encrypted-storage design, Asia/Karachi time zone, and
+  prototype/deployment limitations.
+
+Any unmatched route redirects to /.
+
+The shared Header has navigation links for Home, New Chat, History, API
+Config, Credential reference, Settings, and About, displays local time, and
+offers an immediate lock action. The application applies the selected theme
+to the document, follows the OS color scheme in System mode, adjusts for mobile
+visual viewport height, saves changes after a short debounce, and locks after
+the configured period without pointer or keyboard activity.
+
+Local API endpoints
+-------------------
+All API paths are under /api and are served by frontend/conduit/server/index.ts.
+The JSON body parser has a 64 KB limit. The API disables the Express
+X-Powered-By header and has a final error handler for invalid JSON and
+unexpected request failures.
+
+GET /api/health
+  Returns a small health response.
+
+GET /api/connections
+  Returns connection metadata and the active connection ID. Stored encrypted
+  key material is removed from responses; clients receive only masked key
+  hints, provider metadata, timestamps, and model IDs.
+
+POST /api/validate
+  Accepts apiKey and optional probeUnknown consent. Calls provider model
+  discovery with a 15-second timeout. Successful validation creates a
+  temporary in-memory validation ID (expires after 30 minutes or API restart),
+  with the validated key and models held only by the API process until saved.
+  No conversational models yields an explanatory 422 response.
+
+POST /api/connections
+  Accepts a validationId and creates an encrypted saved connection. Rejects
+  expired validation IDs, duplicate keys, and attempts to exceed the 10-
+  connection maximum. Newly added connection becomes active.
+
+PUT /api/connections/:id
+  Replaces an existing saved key using a valid validation ID, updates provider
+  metadata/models/timestamp, and marks that connection active.
+
+POST /api/connections/:id/refresh
+  Decrypts a saved key server-side, fetches its provider models, and stores the
+  refreshed chat-model list. Provider discovery has a 15-second timeout.
+
+PUT /api/connections/active
+  Sets the active connection ID or clears it with null. A non-null ID must
+  refer to a saved connection.
+
+DELETE /api/connections/:id
+  Deletes one connection. If it was active, the first remaining connection
+  becomes active, or activeId becomes null when none remain.
+
+DELETE /api/connections
+  Clears all saved connections.
+
+POST /api/chat/stream
+  Accepts connectionId, model, and an array of user/assistant messages.
+  Requires 1–100 messages and a model listed for the chosen connection. The
+  server decrypts the saved key, redacts occurrences of that key from message
+  text before forwarding, sends the provider request, and streams server-sent
+  events. Deltas and provider errors are also redacted before reaching the
+  browser. A provider-reported model can be included in the stream. The client
+  expects a final completion event and reports a stream that ends without it.
+  Closing the client response aborts the upstream fetch.
+
+Connection and message data
+---------------------------
+Provider connection records have an ID, provider ID/name, masked key hint,
+chat-model IDs, added timestamp, and encrypted key material. The local API
+persists records in data/connections.json under the frontend/conduit working
+directory. The record's encryptedKey consists of a random 12-byte IV, GCM
+authentication tag, and ciphertext, encoded in Base64. AES-256-GCM uses the
+32-byte key from CONDUIT_ENCRYPTION_KEY. Writes create the data directory,
+write a temporary file with restrictive mode 0600, then rename it into place.
+The key is never returned by the public connection response.
+
+Chat conversations contain ID, title, created/updated timestamps, selected
+connection/provider/model metadata, and messages. A message stores a role,
+text, optional timestamp, optional model, and client-side ID. Conversation
+history is trimmed to the most recent 30 messages and at most 48,000 message
+characters before sending; if the newest message alone exceeds the character
+budget, only its trailing budget-sized portion is sent. Token counts displayed
+by the UI are approximate character-count estimates (roughly one token per
+four characters), not provider-reported billing data.
+
+The frontend store also has a legacy chat-store interface for conversation
+creation/context/message updates. Main page state is held in Zustand. Saved
+provider connections are fetched from the API service rather than stored in
+the encrypted browser vault.
+
+Browser vault and lock behavior
+-------------------------------
+IndexedDB database name: conduit-v3.
+Database version: 1.
+Object store: vault.
+Stored record key: data.
+Persisted content: encrypted chat list and preferences (theme, notification
+sound, and auto-lock duration).
+
+Vault JSON is encrypted with Web Crypto AES-GCM and a fresh random 12-byte IV
+for each write. The vault key is derived in the browser from the unlock
+password using PBKDF2 with SHA-256, 210,000 iterations, and a data salt held in
+the crypto configuration. A separate salt and PBKDF2 result are used to check
+the configured verifier. The KDF work runs in a module Web Worker. The
+derived AES key is retained in application memory only while unlocked; locking
+first attempts a final encrypted save and then removes the key from state.
+If the final save fails, the UI remains unlocked and exposes a vault error so
+the user does not lose in-memory data by locking prematurely.
+
+Failed unlock attempts are tracked in localStorage under conduit-lockout.
+After the third failure, the lockout delay increases exponentially from five
+seconds and is capped at five minutes. Successful unlock resets the counter.
+This is a local UX guardrail, not a server-enforced authentication boundary.
+
+The vault helper serializes writes through a queue to avoid overlapping
+IndexedDB updates. A missing vault record opens as empty chats/settings.
+Malformed or undecryptable data reports an error instead of being silently
+treated as a successful unlock.
+
+API provider implementation notes
+----------------------------------
+OpenAI-compatible integrations use /models and /chat/completions endpoints,
+Bearer authorization, and streaming chat completion payloads. This adapter is
+used by OpenAI, Groq, OpenRouter, Hugging Face Inference Providers, and Mistral.
+Anthropic uses its /models and /messages APIs and content_block_delta events.
+Google Gemini uses its models endpoint and streamGenerateContent SSE endpoint.
+
+Provider errors are normalized to user-facing messages for common HTTP
+statuses (401, 403, 404, 429, and server failures). Provider response detail
+may be included when available, with known API key patterns and the active
+credential redacted. Explicit invalid-credential responses can allow unknown
+provider probing to continue; permission, rate-limit, and other failures are
+not automatically treated as an invalid key.
+
+The browser stream parser handles SSE framing across arbitrary network chunks,
+including CRLF separators; it forwards text deltas and reported models,
+propagates streamed errors, supports AbortSignal cancellation, and treats a
+stream missing its terminal done event as incomplete.
+
+Credential reference application
+--------------------------------
+The root project has its own Vite entry point and React component. Its page
+provides a searchable catalog with category filters, credential-type cards,
+an add-credential dialog, optional restriction notes, common HTTP response
+explanations, in-memory saved-entry list, and removal action.
+
+The catalog contains 16 patterns across five groups:
+
+Visibility:
+  Public / publishable key
+  Secret / private key
+
+Permission:
+  Restricted / scoped key
+  Read-only key
+  Read-write key
+  Admin / master key
+
+Environment:
+  Test / sandbox key
+  Live / production key
+
+Token:
+  Access token
+  Refresh token
+  JWT (JSON Web Token)
+  Personal access token (PAT)
+  Temporary credentials
+
+Machine:
+  Key ID + secret pair
+  Service account key
+  Webhook signing secret
+
+Each catalog record describes purpose, examples, likely result/behavior, input
+fields, required/optional status, and which values are masked as secrets.
+The service-account JSON field is validated as JSON before saving. The dialog
+can reveal secret fields and collects an optional display name/provider and
+restriction notes. These values live only in React component state: they are
+not written to localStorage/IndexedDB, sent to any server, or sent to external
+APIs. Closing/reloading the page loses them. Restrictions in this UI are notes
+only; the workspace cannot enforce provider-side IP, domain, app, quota, or
+rate-limit restrictions.
+
+The reference UI explains common HTTP outcomes (200 success, 401 missing or
+invalid/expired credentials, 403 forbidden, 429 rate/quota limit) and warns
+against pasting production secrets into untrusted apps. These explanations are
+educational guidance, not a live authentication test.
+
+User interface and styling
+--------------------------
+The main app styles are in frontend/conduit/src/index.css and styles.css.
+Tailwind CSS 4 is integrated through the Vite plugin; application CSS defines
+theme variables, responsive layouts, glass-style panels, chat messages,
+dialogs, controls, and light/dark palettes. The page uses a mobile-aware
+visual viewport height variable.
+
+The credential reference app has a separate root src/index.css stylesheet.
+CredentialsPage imports that stylesheet as inline CSS and adds it to the
+workspace Shadow DOM so its visual rules are scoped from the host application.
+
+The main app uses a PWA plugin configured for automatic service-worker
+updates. Its manifest identifies CONDUIT V3.0 / Conduit, standalone display,
+and light background/dark theme colors. Both applications have separate
+index.html entry points and metadata.
+
+Repository file map
+-------------------
+Repository root:
+  README.md                         Main setup and security guide.
+  package.json                      Root scripts and shared dependency manifest.
+  package-lock.json                 Root npm lockfile.
+  index.html                        Credential-reference app HTML entry point.
+  vite.config.ts                    Root Vite, Tailwind, React, and PWA setup.
+  tsconfig.json                     TypeScript project references.
+  tsconfig.app.json                 Root app TypeScript settings.
+  tsconfig.node.json                Root build/config TypeScript settings.
+  LICENSE                           MIT license.
+  .gitignore                        Ignore rules for local/generated files.
+  .env.example                      API environment-variable template.
+  .env                              Present in this checkout; values omitted.
+  communication.txt                Existing short root text file.
+  gitHelp.txt                       Existing short git command notes.
+  .github/copilot-instructions.md   Repository agent guidance.
+  src/main.tsx                      Root React bootstrap.
+  src/App.tsx                       Credential workspace UI/dialog.
+  src/credentialTypes.ts            Typed 16-entry credential catalog.
+  src/index.css                     Credential-reference styling.
+  tests/credentialTypes.test.ts     Credential catalog completeness tests.
+
+Main application (frontend/conduit):
+  README.md                         Main app, setup, providers, and security notes.
+  package.json                      Frontend scripts and dependency manifest.
+  package-lock.json                 Frontend npm lockfile.
+  index.html                        Main chat app HTML entry point.
+  vite.config.ts                    Vite, Tailwind, PWA, and /api proxy setup.
+  tsconfig.json                     TypeScript project references.
+  tsconfig.app.json                 Browser-app TypeScript settings.
+  tsconfig.node.json                Server/config TypeScript settings.
+  .env.example                      Local API encryption key and port template.
+  .gitignore                        Frontend-specific ignored files.
+  public/manifest.webmanifest       PWA metadata.
+  scripts/generate-verifier.mjs     PBKDF2 verifier/salt setup generator.
+  server/index.ts                   Express API routes and SSE forwarding.
+  server/keyStore.ts                Encrypted provider-key file store.
+  server/providers.ts                Provider adapters, model filtering, errors.
+  server/providers.spec.ts          Provider response/error helper tests.
+  src/main.tsx                      Main React bootstrap.
+  src/App.tsx                       Lock gate, routes, autosave, theme/auto-lock.
+  src/api.ts                         Browser-to-local-API calls and SSE parser.
+  src/types.ts                       Shared provider/connection/chat types.
+  src/store.ts                       Zustand application and chat stores.
+  src/index.css                      Tailwind import and theme foundations.
+  src/styles.css                     Main app component/layout styling.
+  src/components/Header.tsx          Navigation, clock, and lock action.
+  src/components/MarkdownContent.tsx  Markdown rendering and copy controls.
+  src/crypto/config.ts                KDF configuration and project time zone.
+  src/crypto/kdf.worker.ts             PBKDF2 derivation worker.
+  src/crypto/lockout.ts                Password verification and lockout helpers.
+  src/crypto/vault.ts                  IndexedDB AES-GCM read/write/clear helpers.
+  src/lib/group.ts                     Conversation date grouping.
+  src/lib/lock.ts                      Final save and lock procedure.
+  src/lib/time.ts                      Formatting/greeting helpers.
+  src/lib/tokens.ts                    Approximate token estimate formatting.
+  src/pages/About.tsx                  About and security description.
+  src/pages/ApiConfig.tsx              Provider key/connection management UI.
+  src/pages/Chat.tsx                   Conversation UI and streamed request flow.
+  src/pages/Credentials.tsx            Shadow DOM embedding of the reference UI.
+  src/pages/History.tsx                Search, group, open, and delete chats.
+  src/pages/Lock.tsx                   Password unlock screen.
+  src/pages/Settings.tsx               Theme, sound, auto-lock, clear-data UI.
+  src/tests/core.spec.ts                Lock comparison, grouping, token tests.
+  src/tests/credentials.spec.tsx        Embedded reference rendering test.
+  tests/api.test.ts                     SSE parser, errors, abort tests.
+  tests/chatStore.test.ts                Conversation-state tests.
+  tests/keyStore.test.ts                 AES-GCM key encryption/tamper tests.
+  tests/lock.test.ts                     Lock final-save behavior tests.
+  tests/providers.test.ts                Provider identification/model tests.
+
+Key dependencies
+----------------
+Runtime libraries include React, React DOM, React Router, Zustand, Express,
+dotenv, idb, hash-wasm, react-markdown, remark-gfm, lucide-react, and
+@tanstack/react-virtual. Development/build tooling includes TypeScript, Vite,
+the React and Tailwind Vite plugins, vite-plugin-pwa, Vitest, tsx,
+concurrently, ESLint, and Prettier. Exact version ranges are recorded in the
+two package.json files and their lockfiles.
+
+Test coverage map
+-----------------
+The available Vitest tests cover:
+- Credential catalog shape, unique IDs, all five categories, key-pair fields,
+  scopes, and optional expiry fields.
+- Credential workspace static rendering with all catalog cards.
+- API SSE parsing across chunk boundaries, cancellation, provider errors, and
+  incomplete streams.
+- Chat store conversation creation and title/message updates.
+- AES-GCM encryption/decryption and tampered ciphertext rejection.
+- Locking behavior when final encrypted persistence succeeds or fails.
+- Provider key hints/probing, error redaction, status explanations, model
+  filtering, and provider stream adaptation.
+- Constant-time password verifier comparison, conversation date grouping,
+  and approximate token helper output.
+
+Security, privacy, and operational limitations
+-----------------------------------------------
+- This is a local, single-device prototype, not a production authentication
+  service or multi-user system. The lock screen and verifier do not establish
+  a server-enforced security boundary.
+- Do not expose the local API service to an untrusted network. The API listens
+  on loopback; the Vite development server is configured to listen on all
+  interfaces, so network reachability of the UI should be considered when
+  developing on shared networks.
+- The main app encrypts saved chat history/settings in IndexedDB while locked
+  from application state; browser/device compromise, malicious extensions,
+  developer tools, or an active unlocked session are outside this model.
+- Provider API keys are encrypted at rest by the local API, but the API must
+  decrypt them to use a provider. Keep the environment encryption key private
+  and back it up securely. Losing/changing it without migrating stored data
+  prevents decryption of existing saved keys.
+- Chat content is sent to the configured external provider for inference.
+  Review provider privacy, retention, and billing terms before use.
+- Password-derived vault data is not automatically re-encrypted when the
+  configured verifier/salts are changed. Export or clear old data first.
+- The credential-reference workspace is explicitly not a secrets manager:
+  sample credentials are transient page-memory examples and are not encrypted
+  or persisted.
+- Provider model availability, permissions, quotas, model names, and endpoint
+  behavior depend on provider accounts and may change independently of this
+  application.
+- Never commit .env files, API keys, vault passwords, or other credentials.
+
+Additional runtime files
+------------------------
+The API creates frontend/conduit/data/connections.json at runtime. Vite and
+TypeScript may create dist, node_modules, and local build/cache files. These
+are not source documentation and are not included in this file. Local .env
+files and their contents are intentionally not documented.
