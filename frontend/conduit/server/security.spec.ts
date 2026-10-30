@@ -188,6 +188,75 @@ describe("provider error redaction", () => {
   });
 });
 
+describe("chat generation options", () => {
+  it("rejects unsupported generation ranges", async () => {
+    const response = await apiRequest("/api/chat/stream", {
+      method: "POST",
+      body: {
+        connectionId: "connection",
+        model: "gpt-test",
+        messages: [{ role: "user", content: "hello" }],
+        temperature: 2.1,
+      },
+      origin: allowedOrigin,
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("Generation options");
+  });
+
+  it("forwards valid generation settings and provider usage in the SSE stream", async () => {
+    readStore.mockResolvedValue({
+      connections: [{
+        id: "connection",
+        provider: "openai",
+        models: ["gpt-test"],
+        encryptedKey: { iv: "", tag: "", ciphertext: "" },
+      }],
+      activeId: "connection",
+    });
+    const providerStream = [
+      `data: ${JSON.stringify({ model: "gpt-test", choices: [{ delta: { content: "reply" } }] })}`,
+      `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 4, completion_tokens: 2 } })}`,
+      "data: [DONE]",
+      "",
+    ].join("\n\n");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(providerStream, {
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await apiRequest("/api/chat/stream", {
+      method: "POST",
+      body: {
+        connectionId: "connection",
+        model: "gpt-test",
+        messages: [{ role: "user", content: "hello" }],
+        systemPrompt: "Be concise",
+        temperature: 0.6,
+        maxTokens: 140,
+      },
+      origin: allowedOrigin,
+    });
+    const result = await response.text();
+    const providerRequest = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const providerBody = JSON.parse(String(providerRequest.body));
+
+    expect(response.status).toBe(200);
+    expect(result).toContain('"delta":"reply"');
+    expect(result).toContain('"usage":{"input":4,"output":2}');
+    expect(providerBody).toMatchObject({
+      messages: [
+        { role: "system", content: "Be concise" },
+        { role: "user", content: "hello" },
+      ],
+      temperature: 0.6,
+      max_tokens: 140,
+    });
+  });
+});
+
 describe("API rate limits", () => {
   it("limits validation and chat stream requests", async () => {
     const validationResponses = await Promise.all(

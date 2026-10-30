@@ -1,4 +1,4 @@
-import { Search, Trash2 } from "lucide-react";
+import { Pin, PinOff, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Header } from "../components/Header";
 import { groupConversations } from "../lib/group";
@@ -8,6 +8,7 @@ import { useAppStore } from "../store";
 export function HistoryPage() {
   const conversations = useAppStore((state) => state.conversations);
   const setConversations = useAppStore((state) => state.setConversations);
+  const updateConversation = useAppStore((state) => state.updateConversation);
   const setActiveConversationId = useAppStore((state) => state.setActiveConversationId);
   const activeConversationId = useAppStore((state) => state.activeConversationId);
   const [query, setQuery] = useState("");
@@ -16,7 +17,7 @@ export function HistoryPage() {
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return [...conversations].sort((a, b) => b.createdAt - a.createdAt).filter((conversation) =>
+    return [...conversations].sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || b.createdAt - a.createdAt).filter((conversation) =>
       !normalized ||
       conversation.title.toLowerCase().includes(normalized) ||
       conversation.messages.some((message) => message.content.toLowerCase().includes(normalized)),
@@ -58,7 +59,15 @@ export function HistoryPage() {
                   <button type="button" className="history-open" onClick={() => openConversation(conversation.id)}>
                     <strong>{conversation.title || "Untitled conversation"}</strong>
                     <small>{F({ dateStyle: "medium", timeStyle: "short", hour12: true }).format(conversation.createdAt)}</small>
-                    <span>{conversation.provider ?? "Unknown provider"} · {conversation.model || "Unknown model"}</span>
+                    <span>{conversation.pinned ? "Pinned · " : ""}{conversation.provider ?? "Unknown provider"} · {conversation.model || "Unknown model"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button history-pin"
+                    aria-label={conversation.pinned ? `Unpin ${conversation.title || "conversation"}` : `Pin ${conversation.title || "conversation"}`}
+                    onClick={() => updateConversation(conversation.id, (item) => ({ ...item, pinned: !item.pinned }))}
+                  >
+                    {conversation.pinned ? <PinOff size={16} /> : <Pin size={16} />}
                   </button>
                   <button
                     type="button"

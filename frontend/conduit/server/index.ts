@@ -3,7 +3,7 @@ import express from "express";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { ChatMessage, ProviderId } from "../src/types";
+import type { ChatGenerationOptions, ChatMessage, ProviderId } from "../src/types";
 import {
   decryptApiKey,
   encryptApiKey,
@@ -357,11 +357,24 @@ app.delete("/api/connections/:id", async (request, response, next) => {
 });
 
 app.post("/api/chat/stream", rateLimit(30, 60_000), async (request, response) => {
-  const { connectionId, model, messages } = request.body as {
+  const { connectionId, model, messages, systemPrompt, temperature, maxTokens } = request.body as {
     connectionId?: unknown;
     model?: unknown;
     messages?: unknown;
+    systemPrompt?: unknown;
+    temperature?: unknown;
+    maxTokens?: unknown;
   };
+  if (
+    (systemPrompt !== undefined && (typeof systemPrompt !== "string" || systemPrompt.length > 12_000)) ||
+    (temperature !== undefined &&
+      (typeof temperature !== "number" || !Number.isFinite(temperature) || temperature < 0 || temperature > 2)) ||
+    (maxTokens !== undefined &&
+      (typeof maxTokens !== "number" || !Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > 200_000))
+  ) {
+    response.status(400).json({ error: "Generation options are outside the supported ranges." });
+    return;
+  }
   if (
     typeof connectionId !== "string" ||
     typeof model !== "string" ||
@@ -409,7 +422,12 @@ app.post("/api/chat/stream", rateLimit(30, 60_000), async (request, response) =>
       ...message,
       content: redactApiKey(message.content, activeSecret),
     }));
-    upstream = await provider.chat(activeSecret, model, safeMessages, controller.signal);
+    const options: ChatGenerationOptions = {
+      ...(typeof systemPrompt === "string" ? { systemPrompt: redactApiKey(systemPrompt, activeSecret) } : {}),
+      ...(typeof temperature === "number" ? { temperature } : {}),
+      ...(typeof maxTokens === "number" ? { maxTokens } : {}),
+    };
+    upstream = await provider.chat(activeSecret, model, safeMessages, controller.signal, options);
     if (!upstream.ok || !upstream.body) {
       const error = upstream.ok
         ? new ProviderRequestError("Provider returned no response body.", upstream.status)
@@ -447,6 +465,8 @@ app.post("/api/chat/stream", rateLimit(30, 60_000), async (request, response) =>
     if (providerError) throw providerError;
     const actualModel = streamProvider.extractModel(event);
     if (actualModel) response.write(`data: ${JSON.stringify({ model: actualModel })}\n\n`);
+    const usage = streamProvider.extractUsage(event);
+    if (usage) response.write(`data: ${JSON.stringify({ usage })}\n\n`);
     const delta = streamProvider.extractDelta(event);
     if (delta) {
       response.write(`data: ${JSON.stringify({ delta: redactApiKey(delta, activeSecret) })}\n\n`);

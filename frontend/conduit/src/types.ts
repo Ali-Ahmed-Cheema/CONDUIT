@@ -23,9 +23,20 @@ export interface ValidationResult {
 }
 
 export interface ChatMessage {
-  role: "user" | "assistant";
+  role: "system" | "user" | "assistant";
   content: string;
   model?: string;
+}
+
+export interface ChatGenerationOptions {
+  systemPrompt?: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+export interface TokenUsage {
+  input?: number;
+  output?: number;
 }
 
 export interface ChatConversation {

@@ -2,10 +2,10 @@ import { dayKey, F } from "./time";
 
 export type GroupLabel = "Today" | "Yesterday" | "Previous 7 Days" | string;
 
-export const groupConversations = (
-  conversations: Array<{ id: string; createdAt: number; title?: string; provider?: string; model?: string }>,
+export const groupConversations = <T extends { id: string; createdAt: number; title?: string; provider?: string; model?: string }>(
+  conversations: T[],
 ) => {
-  const groups = new Map<string, typeof conversations>();
+  const groups = new Map<string, T[]>();
   const today = Date.parse(dayKey(Date.now()));
 
   for (const conversation of conversations) {

@@ -25,6 +25,7 @@ describe("grouping and token helpers", () => {
   it("estimates tokens and formats reports without mixing estimates", () => {
     expect(estimateTokens("hello world")).toBe(3);
     expect(makeTokenSummary({ input: 12, output: 8 }, 5)).toContain("Reported: 12 in - 8 out");
-    expect(makeTokenSummary({ input: 12, output: 8 }, 5)).toContain("Estimated (not exact): ~5");
+    expect(makeTokenSummary({ input: 12, output: 8 }, 5)).not.toContain("Estimated");
+    expect(makeTokenSummary(undefined, 5)).toContain("Estimated (not exact): ~5");
   });
 });

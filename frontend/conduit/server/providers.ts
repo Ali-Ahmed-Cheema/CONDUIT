@@ -1,4 +1,4 @@
-import type { ChatMessage, ProviderId } from "../src/types";
+import type { ChatGenerationOptions, ChatMessage, ProviderId, TokenUsage } from "../src/types";
 
 export interface ModelRecord {
   id: string;
@@ -16,9 +16,11 @@ export interface Provider {
     model: string,
     messages: ChatMessage[],
     signal: AbortSignal,
+    options?: ChatGenerationOptions,
   ) => Promise<Response>;
   extractDelta: (event: unknown) => string;
   extractModel: (event: unknown) => string | undefined;
+  extractUsage: (event: unknown) => TokenUsage | undefined;
 }
 
 export class ProviderRequestError extends Error {
@@ -112,10 +114,26 @@ function openAiModels(data: unknown): ModelRecord[] {
     .map(({ entry, id }) => ({ id, chat: modelIsChat(id, entry) }));
 }
 
-function messagesPayload(messages: ChatMessage[]) {
-  return messages
-    .filter((message) => message.content.trim().length > 0)
-    .map(({ role, content }) => ({ role, content }));
+function messagesPayload(messages: ChatMessage[], systemPrompt?: string) {
+  const prompt = systemPrompt?.trim();
+  return [
+    ...(prompt ? [{ role: "system" as const, content: prompt }] : []),
+    ...messages
+      .filter((message) => message.role !== "system" && message.content.trim().length > 0)
+      .map(({ role, content }) => ({ role, content })),
+  ];
+}
+
+function numberField(value: unknown, key: string): number | undefined {
+  if (!value || typeof value !== "object" || !(key in value)) return undefined;
+  const field = (value as Record<string, unknown>)[key];
+  return typeof field === "number" && Number.isFinite(field) && field >= 0 ? field : undefined;
+}
+
+function usageFields(value: unknown, inputKey: string, outputKey: string): TokenUsage | undefined {
+  const input = numberField(value, inputKey);
+  const output = numberField(value, outputKey);
+  return input === undefined && output === undefined ? undefined : { input, output };
 }
 
 const openAiCompatible = (
@@ -135,11 +153,21 @@ const openAiCompatible = (
     });
     return openAiModels(await providerJson(response));
   },
-  chat(key, model, messages, signal) {
+  chat(key, model, messages, signal, options = {}) {
+    const generation = {
+      ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
+      ...(options.maxTokens === undefined ? {} : { max_tokens: options.maxTokens }),
+    };
     return fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model, messages: messagesPayload(messages), stream: true }),
+      body: JSON.stringify({
+        model,
+        messages: messagesPayload(messages, options.systemPrompt),
+        stream: true,
+        ...(id === "openai" ? { stream_options: { include_usage: true } } : {}),
+        ...generation,
+      }),
       signal,
     });
   },
@@ -160,6 +188,10 @@ const openAiCompatible = (
     const model = (event as { model?: unknown } | null)?.model;
     return typeof model === "string" ? model : undefined;
   },
+  extractUsage(event) {
+    const usage = (event as { usage?: unknown } | null)?.usage;
+    return usageFields(usage, "prompt_tokens", "completion_tokens");
+  },
 });
 
 const providers: Provider[] = [
@@ -176,7 +208,7 @@ const providers: Provider[] = [
       });
       return openAiModels(await providerJson(response));
     },
-    chat(key, model, messages, signal) {
+    chat(key, model, messages, signal, options = {}) {
       const chatMessages = messagesPayload(messages);
       return fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -187,9 +219,11 @@ const providers: Provider[] = [
         },
         body: JSON.stringify({
           model,
-          max_tokens: 2048,
+          max_tokens: options.maxTokens ?? 2048,
           messages: chatMessages,
           stream: true,
+          ...(options.systemPrompt?.trim() ? { system: options.systemPrompt.trim() } : {}),
+          ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
         }),
         signal,
       });
@@ -203,6 +237,16 @@ const providers: Provider[] = [
       return value?.type === "message_start" && typeof value.message?.model === "string"
         ? value.message.model
         : undefined;
+    },
+    extractUsage(event) {
+      const value = event as {
+        type?: string;
+        message?: { usage?: unknown };
+        usage?: unknown;
+      } | null;
+      if (value?.type === "message_start") return usageFields(value.message?.usage, "input_tokens", "output_tokens");
+      if (value?.type === "message_delta") return usageFields(value.usage, "input_tokens", "output_tokens");
+      return undefined;
     },
   },
   {
@@ -223,17 +267,27 @@ const providers: Provider[] = [
         })
         .filter((model) => model.id);
     },
-    chat(key, model, messages, signal) {
+    chat(key, model, messages, signal, options = {}) {
       const contents = messagesPayload(messages).map((message) => ({
         role: message.role === "assistant" ? "model" : "user",
         parts: [{ text: message.content }],
       }));
+      const generationConfig = {
+        ...(options.temperature === undefined ? {} : { temperature: options.temperature }),
+        ...(options.maxTokens === undefined ? {} : { maxOutputTokens: options.maxTokens }),
+      };
       return fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`,
         {
           method: "POST",
           headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
-          body: JSON.stringify({ contents }),
+          body: JSON.stringify({
+            contents,
+            ...(options.systemPrompt?.trim()
+              ? { systemInstruction: { parts: [{ text: options.systemPrompt.trim() }] } }
+              : {}),
+            ...(Object.keys(generationConfig).length > 0 ? { generationConfig } : {}),
+          }),
           signal,
         },
       );
@@ -248,6 +302,10 @@ const providers: Provider[] = [
     extractModel(event) {
       const value = (event as { modelVersion?: unknown } | null)?.modelVersion;
       return typeof value === "string" ? value : undefined;
+    },
+    extractUsage(event) {
+      const usage = (event as { usageMetadata?: unknown } | null)?.usageMetadata;
+      return usageFields(usage, "promptTokenCount", "candidatesTokenCount");
     },
   },
   openAiCompatible("groq", "Groq", "https://api.groq.com/openai/v1", (key) => key.startsWith("gsk_")),

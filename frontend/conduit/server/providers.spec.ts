@@ -123,3 +123,96 @@ describe("Hugging Face provider", () => {
     );
   });
 });
+
+describe("provider generation options and token usage", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("passes system prompt and generation options to OpenAI-compatible requests", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = findProvider("openai");
+    if (!provider) throw new Error("OpenAI provider not registered.");
+
+    await provider.chat(
+      "sk-test-key",
+      "gpt-test",
+      [{ role: "user", content: "Hello" }],
+      new AbortController().signal,
+      { systemPrompt: "Be concise", temperature: 0.4, maxTokens: 120 },
+    );
+
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toEqual({
+      model: "gpt-test",
+      messages: [
+        { role: "system", content: "Be concise" },
+        { role: "user", content: "Hello" },
+      ],
+      stream: true,
+      stream_options: { include_usage: true },
+      temperature: 0.4,
+      max_tokens: 120,
+    });
+    expect(provider.extractUsage({ usage: { prompt_tokens: 8, completion_tokens: 5 } })).toEqual({
+      input: 8,
+      output: 5,
+    });
+  });
+
+  it("maps Anthropic generation options and incremental stream usage", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = findProvider("anthropic");
+    if (!provider) throw new Error("Anthropic provider not registered.");
+
+    await provider.chat(
+      "sk-ant-test-key",
+      "claude-test",
+      [{ role: "user", content: "Hello" }],
+      new AbortController().signal,
+      { systemPrompt: "Be concise", temperature: 0.2, maxTokens: 90 },
+    );
+
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      system: "Be concise",
+      temperature: 0.2,
+      max_tokens: 90,
+      messages: [{ role: "user", content: "Hello" }],
+    });
+    expect(provider.extractUsage({ type: "message_start", message: { usage: { input_tokens: 8 } } })).toEqual({
+      input: 8,
+      output: undefined,
+    });
+    expect(provider.extractUsage({ type: "message_delta", usage: { output_tokens: 5 } })).toEqual({
+      input: undefined,
+      output: 5,
+    });
+  });
+
+  it("maps Google generation options and usage metadata", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = findProvider("google");
+    if (!provider) throw new Error("Google provider not registered.");
+
+    await provider.chat(
+      "AIza-test-key",
+      "gemini-test",
+      [{ role: "user", content: "Hello" }],
+      new AbortController().signal,
+      { systemPrompt: "Be concise", temperature: 0.3, maxTokens: 70 },
+    );
+
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toEqual({
+      contents: [{ role: "user", parts: [{ text: "Hello" }] }],
+      systemInstruction: { parts: [{ text: "Be concise" }] },
+      generationConfig: { temperature: 0.3, maxOutputTokens: 70 },
+    });
+    expect(provider.extractUsage({ usageMetadata: { promptTokenCount: 8, candidatesTokenCount: 5 } })).toEqual({
+      input: 8,
+      output: 5,
+    });
+  });
+});

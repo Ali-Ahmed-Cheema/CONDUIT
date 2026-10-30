@@ -1,4 +1,10 @@
-import type { ConnectionsResponse, ValidationResult, ChatMessage } from "./types";
+import type {
+  ChatGenerationOptions,
+  ChatMessage,
+  ConnectionsResponse,
+  TokenUsage,
+  ValidationResult,
+} from "./types";
 
 export class ApiRequestError extends Error {
   constructor(
@@ -82,11 +88,13 @@ export async function streamChat(
   onDelta: (text: string) => void,
   onModel?: (model: string) => void,
   signal?: AbortSignal,
+  options?: ChatGenerationOptions,
+  onUsage?: (usage: TokenUsage) => void,
 ): Promise<void> {
   const response = await fetch("/api/chat/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ connectionId, model, messages }),
+    body: JSON.stringify({ connectionId, model, messages, ...options }),
     signal,
   });
   if (!response.ok || !response.body) {
@@ -106,10 +114,17 @@ export async function streamChat(
       .map((line) => line.slice(5).replace(/^ /, ""))
       .join("\n");
     if (!data) return;
-    const parsed = JSON.parse(data) as { delta?: string; model?: string; error?: string; done?: boolean };
+    const parsed = JSON.parse(data) as {
+      delta?: string;
+      model?: string;
+      error?: string;
+      done?: boolean;
+      usage?: TokenUsage;
+    };
     if (parsed.error) throw new Error(parsed.error);
     if (parsed.delta) onDelta(parsed.delta);
     if (parsed.model) onModel?.(parsed.model);
+    if (parsed.usage) onUsage?.(parsed.usage);
     if (parsed.done) completed = true;
   };
 

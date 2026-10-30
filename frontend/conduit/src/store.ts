@@ -20,6 +20,9 @@ export interface ChatMessage {
   content: string;
   ts?: number;
   model?: string;
+  usage?: { input?: number; output?: number };
+  incomplete?: boolean;
+  failed?: boolean;
 }
 
 export interface ChatConversation {
@@ -31,6 +34,10 @@ export interface ChatConversation {
   provider?: ProviderId | "unknown";
   model: string;
   keyId?: string | null;
+  pinned?: boolean;
+  systemPrompt?: string;
+  temperature?: number;
+  maxTokens?: number;
   messages: ChatMessage[];
 }
 
@@ -129,83 +136,3 @@ export const getCurrentConversation = () => {
   const { conversations, activeConversationId } = useAppStore.getState();
   return conversations.find((conversation) => conversation.id === activeConversationId) ?? null;
 };
-
-interface LegacyChatState {
-  conversations: ChatConversation[];
-  activeConversationId: string | null;
-  currentConnectionId: string | null;
-  currentModel: string;
-  startNewConversation: (connectionId: string | null, model: string) => string;
-  activateConversation: (id: string) => void;
-  setCurrentContext: (connectionId: string | null, model: string) => void;
-  setConversationMessages: (id: string, messages: ChatMessage[]) => void;
-  setMessages: (messages: ChatMessage[]) => void;
-}
-
-function createConversation(connectionId: string | null, model: string): ChatConversation {
-  const now = Date.now();
-  return {
-    id: globalThis.crypto.randomUUID(),
-    title: "New conversation",
-    messages: [],
-    connectionId,
-    model,
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
-export const useChatStore = create<LegacyChatState>()((set, get) => ({
-  conversations: [],
-  activeConversationId: null,
-  currentConnectionId: null,
-  currentModel: "",
-  startNewConversation: (connectionId, model) => {
-    const conversation = createConversation(connectionId, model);
-    set((state) => ({
-      conversations: [conversation, ...state.conversations],
-      activeConversationId: conversation.id,
-      currentConnectionId: connectionId,
-      currentModel: model,
-    }));
-    return conversation.id;
-  },
-  activateConversation: (id) => {
-    const conversation = get().conversations.find((item) => item.id === id);
-    if (!conversation) return;
-    set({
-      activeConversationId: id,
-      currentConnectionId: conversation.connectionId ?? null,
-      currentModel: conversation.model,
-    });
-  },
-  setCurrentContext: (connectionId, model) => set((state) => ({
-    currentConnectionId: connectionId,
-    currentModel: model,
-    conversations: state.conversations.map((conversation) =>
-      conversation.id === state.activeConversationId
-        ? { ...conversation, connectionId, model, updatedAt: Date.now() }
-        : conversation,
-    ),
-  })),
-  setConversationMessages: (id, messages) => set((state) => {
-    const current = state.conversations.find((item) => item.id === id);
-    if (!current) return state;
-    const firstUserMessage = messages.find((message) => message.role === "user")?.content?.trim();
-    const title = current.title === "New conversation" && firstUserMessage ? firstUserMessage.slice(0, 72) : current.title;
-    return {
-      ...state,
-      conversations: state.conversations.map((item) => item.id === id ? { ...item, title, messages, updatedAt: Date.now() } : item),
-    };
-  }),
-  setMessages: (messages) => set((state) => {
-    const current = state.conversations.find((item) => item.id === state.activeConversationId);
-    if (!current) return state;
-    return {
-      ...state,
-      conversations: state.conversations.map((item) =>
-        item.id === current.id ? { ...item, messages, updatedAt: Date.now() } : item,
-      ),
-    };
-  }),
-}));

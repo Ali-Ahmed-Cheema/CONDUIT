@@ -1,12 +1,13 @@
-import { Copy, SendHorizonal, Square } from "lucide-react";
+import { Copy, Download, Pencil, Pin, PinOff, RefreshCw, SendHorizonal, Square, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Link } from "react-router-dom";
 import { getConnections, limitChatHistory, streamChat } from "../api";
 import { Header } from "../components/Header";
 import { MarkdownContent } from "../components/MarkdownContent";
-import { estimateTokens } from "../lib/tokens";
+import { estimateTokens, makeTokenSummary } from "../lib/tokens";
 import { fullDateTime, greeting, msgTime } from "../lib/time";
-import { type ChatMessage, useAppStore } from "../store";
+import { useAppStore } from "../store";
 
 const beep = () => {
   const AudioCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -44,6 +45,11 @@ export function ChatPage() {
   const [error, setError] = useState("");
   const [connectionError, setConnectionError] = useState("");
   const [loadingConnections, setLoadingConnections] = useState(true);
+  const [systemPrompt, setSystemPrompt] = useState("");
+  const [temperature, setTemperature] = useState("");
+  const [maxTokens, setMaxTokens] = useState("");
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState("");
   const messagesPanel = useRef<HTMLElement>(null);
   const shouldAutoScroll = useRef(true);
   const previousConversationId = useRef(activeConversationId);
@@ -57,7 +63,32 @@ export function ChatPage() {
   );
   const activeConnection = connections.find((connection) => connection.id === activeConnectionId) ?? null;
   const messages = currentConversation?.messages ?? [];
-  const totalTokens = messages.reduce((sum, message) => sum + estimateTokens(message.content || ""), 0);
+  const virtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => messagesPanel.current,
+    estimateSize: () => 180,
+    overscan: 5,
+  });
+  const assistantMessages = messages.filter((message) => message.role === "assistant" && message.content);
+  const hasCompleteUsage = assistantMessages.length > 0 && assistantMessages.every((message) => message.usage);
+  const reportedUsage = assistantMessages.reduce(
+    (usage, message) => ({
+      input: usage.input + (message.usage?.input ?? 0),
+      output: usage.output + (message.usage?.output ?? 0),
+    }),
+    { input: 0, output: 0 },
+  );
+  const estimatedTokens = messages.reduce((sum, message) => sum + estimateTokens(message.content || ""), 0);
+  const tokenSummary = hasCompleteUsage
+    ? makeTokenSummary(reportedUsage)
+    : makeTokenSummary(undefined, estimatedTokens);
+
+  useEffect(() => {
+    setSystemPrompt(currentConversation?.systemPrompt ?? "");
+    setTemperature(currentConversation?.temperature === undefined ? "" : String(currentConversation.temperature));
+    setMaxTokens(currentConversation?.maxTokens === undefined ? "" : String(currentConversation.maxTokens));
+    setEditingMessageId(null);
+  }, [activeConversationId, currentConversation?.systemPrompt, currentConversation?.temperature, currentConversation?.maxTokens]);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,8 +123,10 @@ export function ChatPage() {
       previousConversationId.current = activeConversationId;
       shouldAutoScroll.current = true;
     }
-    if (shouldAutoScroll.current) panel.scrollTop = panel.scrollHeight;
-  }, [activeConversationId, messages]);
+    if (shouldAutoScroll.current && messages.length > 0) {
+      virtualizer.scrollToIndex(messages.length - 1, { align: "end" });
+    }
+  }, [activeConversationId, messages, virtualizer]);
 
   useEffect(() => {
     if (activeConnection?.models.length && !activeConnection.models.includes(activeModel)) {
@@ -101,14 +134,14 @@ export function ChatPage() {
     }
   }, [activeConnection, activeModel, setActiveModel]);
 
-  const handleSend = async () => {
-    if (!draft.trim() || sending) return;
+  const handleSend = async (contentOverride?: string, existingUserId?: string, continueMessageId?: string) => {
+    const userContent = (contentOverride ?? draft).trim();
+    if (!userContent || sending) return;
     if (!activeConnection || !activeModel) {
       setError("Add and activate a valid API connection before sending.");
       return;
     }
 
-    const userContent = draft.trim();
     const now = Date.now();
     const conversation = currentConversation ?? {
         id: globalThis.crypto.randomUUID(),
@@ -123,30 +156,52 @@ export function ChatPage() {
     if (!currentConversation) addConversation(conversation);
 
     const conversationId = conversation.id;
-    const userMessage: ChatMessage = {
-      id: globalThis.crypto.randomUUID(),
-      role: "user",
-      content: userContent,
-      ts: now,
-      model: activeModel,
-    };
-    const assistantId = globalThis.crypto.randomUUID();
-    appendMessage(conversationId, userMessage);
+    if (existingUserId) {
+      const stateConversation = useAppStore.getState().conversations.find((item) => item.id === conversationId);
+      if (!stateConversation?.messages.some((message) => message.id === existingUserId && message.role === "user")) return;
+    } else {
+      appendMessage(conversationId, {
+        id: globalThis.crypto.randomUUID(),
+        role: "user",
+        content: userContent,
+        ts: now,
+        model: activeModel,
+      });
+    }
+    const assistantId = continueMessageId ?? globalThis.crypto.randomUUID();
+    if (continueMessageId) {
+      updateConversation(conversationId, (item) => ({
+        ...item,
+        messages: item.messages.map((message) =>
+          message.id === assistantId ? { ...message, failed: false, incomplete: false } : message,
+        ),
+      }));
+    }
     const history = useAppStore.getState().conversations.find((item) => item.id === conversationId)?.messages ?? [];
     const requestMessages = limitChatHistory(history).map(({ role, content }) => ({ role, content }));
-    appendMessage(conversationId, {
-      id: assistantId,
-      role: "assistant",
-      content: "",
-      ts: Date.now(),
-      model: activeModel,
-    });
+    if (!continueMessageId) {
+      appendMessage(conversationId, {
+        id: assistantId,
+        role: "assistant",
+        content: "",
+        ts: Date.now(),
+        model: activeModel,
+      });
+    }
+    const generationOptions = {
+      systemPrompt: systemPrompt.trim(),
+      ...(temperature === "" ? {} : { temperature: Number(temperature) }),
+      ...(maxTokens === "" ? {} : { maxTokens: Number(maxTokens) }),
+    };
     updateConversation(conversationId, (item) => ({
       ...item,
       title: item.title === "New conversation" ? userContent.slice(0, 72) : item.title,
       provider: activeConnection.provider,
       connectionId: activeConnection.id,
       model: activeModel,
+      systemPrompt: generationOptions.systemPrompt,
+      temperature: generationOptions.temperature,
+      maxTokens: generationOptions.maxTokens,
     }));
 
     setDraft("");
@@ -167,7 +222,9 @@ export function ChatPage() {
           updateConversation(conversationId, (item) => ({
             ...item,
             messages: item.messages.map((message) =>
-              message.id === assistantId ? { ...message, content: message.content + delta } : message,
+              message.id === assistantId
+                ? { ...message, content: message.content + delta, failed: false, incomplete: false }
+                : message,
             ),
             updatedAt: Date.now(),
           }));
@@ -182,6 +239,15 @@ export function ChatPage() {
           }));
         },
         controller.signal,
+        generationOptions,
+        (usage) => {
+          updateConversation(conversationId, (item) => ({
+            ...item,
+            messages: item.messages.map((message) => message.id === assistantId
+              ? { ...message, usage: { ...message.usage, ...usage } }
+              : message),
+          }));
+        },
       );
       if (!receivedContent) throw new Error("The provider returned an empty response. Try again or choose another model.");
       setStatus("sent");
@@ -189,7 +255,9 @@ export function ChatPage() {
     } catch (reason) {
       updateConversation(conversationId, (item) => ({
         ...item,
-        messages: item.messages.filter((message) => message.id !== assistantId || message.content.length > 0),
+        messages: item.messages.map((message) =>
+          message.id === assistantId ? { ...message, incomplete: true, failed: true } : message,
+        ),
       }));
       if (reason instanceof Error && reason.name === "AbortError") {
         setStatus("stopped");
@@ -204,9 +272,75 @@ export function ChatPage() {
     }
   };
 
+  const retryResponse = (assistantId: string, continueExisting: boolean) => {
+    if (!currentConversation) return;
+    const assistantIndex = currentConversation.messages.findIndex((message) => message.id === assistantId);
+    const userMessage = currentConversation.messages
+      .slice(0, assistantIndex)
+      .reverse()
+      .find((message) => message.role === "user");
+    if (!userMessage?.id) return;
+    if (continueExisting) {
+      void handleSend(userMessage.content, userMessage.id, assistantId);
+      return;
+    }
+    updateConversation(currentConversation.id, (item) => ({
+      ...item,
+      messages: item.messages.slice(0, item.messages.findIndex((message) => message.id === assistantId)),
+    }));
+    void handleSend(userMessage.content, userMessage.id);
+  };
+
+  const editAndResend = (messageId: string) => {
+    if (!currentConversation) return;
+    const index = currentConversation.messages.findIndex((message) => message.id === messageId);
+    const edited = editingContent.trim();
+    if (index < 0 || !edited) return;
+    updateConversation(currentConversation.id, (item) => ({
+      ...item,
+      messages: item.messages.slice(0, index + 1).map((message) =>
+        message.id === messageId ? { ...message, content: edited, ts: Date.now() } : message,
+      ),
+    }));
+    setEditingMessageId(null);
+    void handleSend(edited, messageId);
+  };
+
+  const removeMessage = (messageId: string) => {
+    if (!currentConversation) return;
+    updateConversation(currentConversation.id, (item) => ({
+      ...item,
+      messages: item.messages.filter((message) => message.id !== messageId),
+    }));
+  };
+
+  const exportConversation = (format: "markdown" | "json") => {
+    if (!currentConversation) return;
+    const body = format === "json"
+      ? JSON.stringify(currentConversation, null, 2)
+      : `# ${currentConversation.title}\n\n${currentConversation.messages
+          .map((message) => `## ${message.role === "user" ? "You" : "Assistant"}\n\n${message.content}`)
+          .join("\n\n")}\n`;
+    const file = new Blob([body], { type: format === "json" ? "application/json" : "text/markdown" });
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    const safeTitle = currentConversation.title.replace(/[\\/:*?"<>|]+/g, "-") || "conversation";
+    link.download = `${safeTitle}.${format === "json" ? "json" : "md"}`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const modelLabel = activeConnection
     ? `${activeConnection.providerName} · ${activeModel || "Choose a model"}`
     : loadingConnections ? "Connecting to API service..." : "No active API connection";
+  const modelUnavailable = Boolean(
+    currentConversation?.model &&
+      activeConnection &&
+      currentConversation.connectionId === activeConnection.id &&
+      !activeConnection.models.includes(currentConversation.model),
+  );
+  const virtualMessages = virtualizer.getVirtualItems();
 
   return (
     <div className="page-shell">
@@ -214,9 +348,109 @@ export function ChatPage() {
       <main className="chat-page">
         <div className="model-pill glass">{modelLabel}</div>
 
+        {currentConversation && (
+          <div className="conversation-toolbar glass">
+            <label>
+              <span className="sr-only">Conversation name</span>
+              <input
+                aria-label="Conversation name"
+                value={currentConversation.title}
+                onChange={(event) => updateConversation(currentConversation.id, (item) => ({
+                  ...item,
+                  title: event.target.value,
+                }))}
+                maxLength={120}
+              />
+            </label>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={currentConversation.pinned ? "Unpin conversation" : "Pin conversation"}
+              onClick={() => updateConversation(currentConversation.id, (item) => ({ ...item, pinned: !item.pinned }))}
+            >
+              {currentConversation.pinned ? <PinOff size={16} /> : <Pin size={16} />}
+            </button>
+            <button type="button" className="icon-button" aria-label="Export conversation as Markdown" onClick={() => exportConversation("markdown")}>
+              <Download size={16} /> .md
+            </button>
+            <button type="button" className="icon-button" aria-label="Export conversation as JSON" onClick={() => exportConversation("json")}>
+              <Download size={16} /> .json
+            </button>
+          </div>
+        )}
+
+        <details className="generation-options glass">
+          <summary>System prompt and generation options</summary>
+          <label>
+            System prompt
+            <textarea
+              value={systemPrompt}
+              maxLength={12_000}
+              rows={3}
+              onChange={(event) => {
+                const value = event.target.value;
+                setSystemPrompt(value);
+                if (currentConversation) {
+                  updateConversation(currentConversation.id, (item) => ({ ...item, systemPrompt: value }));
+                }
+              }}
+            />
+          </label>
+          <div className="generation-fields">
+            <label>
+              Temperature (0–2)
+              <input
+                aria-label="Temperature"
+                type="number"
+                min="0"
+                max="2"
+                step="0.1"
+                value={temperature}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setTemperature(value);
+                  if (currentConversation) {
+                    updateConversation(currentConversation.id, (item) => ({
+                      ...item,
+                      temperature: value === "" ? undefined : Number(value),
+                    }));
+                  }
+                }}
+              />
+            </label>
+            <label>
+              Max tokens (1–200000)
+              <input
+                aria-label="Max tokens"
+                type="number"
+                min="1"
+                max="200000"
+                step="1"
+                value={maxTokens}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setMaxTokens(value);
+                  if (currentConversation) {
+                    updateConversation(currentConversation.id, (item) => ({
+                      ...item,
+                      maxTokens: value === "" ? undefined : Number(value),
+                    }));
+                  }
+                }}
+              />
+            </label>
+          </div>
+        </details>
+
+        {modelUnavailable && (
+          <p className="error-alert" role="status">
+            This conversation’s previous model is no longer available for this connection. Choose an available model below to continue.
+          </p>
+        )}
+
         <section
           className="messages-panel"
-          aria-live="polite"
+          aria-live="off"
           ref={messagesPanel}
           onScroll={(event) => {
             const panel = event.currentTarget;
@@ -225,31 +459,89 @@ export function ChatPage() {
         >
           {messages.length === 0 ? (
             <div className="empty-state"><h1>{greeting()}</h1></div>
-          ) : messages.map((message) => (
-            <article key={message.id} className={`message ${message.role}`}>
-              <div className="message-meta">
-                <strong>{message.role === "user" ? "You" : "Conduit"}</strong>
-                <time dateTime={new Date(message.ts ?? Date.now()).toISOString()} title={fullDateTime(message.ts ?? Date.now())}>
-                  {msgTime(message.ts ?? Date.now())}
-                </time>
-              </div>
-              <div className="message-body">
-                {message.content
-                  ? <MarkdownContent content={message.content} onCopyError={() => setError("Could not copy code to the clipboard.")} />
-                  : sending && message.role === "assistant" ? "Thinking..." : ""}
-                {message.role === "assistant" && message.content && (
-                  <button
-                    type="button"
-                    aria-label="Copy response"
-                    className="response-copy-button"
-                    onClick={() => void navigator.clipboard.writeText(message.content).catch(() => setError("Could not copy this response to the clipboard."))}
+          ) : (
+            <div className="messages-virtual-content" style={{ height: `${virtualizer.getTotalSize()}px` }}>
+              {virtualMessages.map((virtualItem) => {
+                const message = messages[virtualItem.index];
+                const messageId = message.id;
+                const previousUser = messages.slice(0, virtualItem.index).reverse()
+                  .find((item) => item.role === "user");
+                return (
+                  <article
+                    key={messageId ?? virtualItem.key}
+                    ref={virtualizer.measureElement}
+                    data-index={virtualItem.index}
+                    className={`message ${message.role}`}
+                    style={{ transform: `translateY(${virtualItem.start}px)` }}
                   >
-                    <Copy size={14} /> Copy response
-                  </button>
-                )}
-              </div>
-            </article>
-          ))}
+                    <div className="message-meta">
+                      <strong>{message.role === "user" ? "You" : "Conduit"}</strong>
+                      <time dateTime={new Date(message.ts ?? Date.now()).toISOString()} title={fullDateTime(message.ts ?? Date.now())}>
+                        {msgTime(message.ts ?? Date.now())}
+                      </time>
+                      {message.model && <small>{message.model}</small>}
+                    </div>
+                    <div className="message-body" aria-live={sending && virtualItem.index === messages.length - 1 ? "polite" : undefined}>
+                      {editingMessageId === messageId ? (
+                        <div className="message-edit">
+                          <textarea aria-label="Edit message" value={editingContent} onChange={(event) => setEditingContent(event.target.value)} />
+                          <button type="button" className="secondary-button" onClick={() => editAndResend(messageId ?? "")}>Save and resend</button>
+                          <button type="button" className="secondary-button" onClick={() => setEditingMessageId(null)}>Cancel edit</button>
+                        </div>
+                      ) : message.content ? (
+                        <MarkdownContent content={message.content} onCopyError={() => setError("Could not copy code to the clipboard.")} />
+                      ) : sending && message.role === "assistant" ? "Thinking..." : ""}
+                      {message.role === "assistant" && message.content && (
+                        <button
+                          type="button"
+                          aria-label="Copy response"
+                          className="response-copy-button"
+                          onClick={() => void navigator.clipboard.writeText(message.content).catch(() => setError("Could not copy this response to the clipboard."))}
+                        >
+                          <Copy size={14} /> Copy response
+                        </button>
+                      )}
+                      {messageId && !sending && (
+                        <div className="message-actions">
+                          {message.role === "user" && (
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              onClick={() => {
+                                setEditingMessageId(messageId);
+                                setEditingContent(message.content);
+                              }}
+                            >
+                              <Pencil size={14} /> Edit and resend
+                            </button>
+                          )}
+                          {message.role === "assistant" && previousUser?.id && (
+                            message.incomplete || message.failed ? (
+                              <>
+                                <button type="button" className="secondary-button" onClick={() => retryResponse(messageId, true)}>
+                                  <RefreshCw size={14} /> Continue
+                                </button>
+                                <button type="button" className="secondary-button" onClick={() => retryResponse(messageId, false)}>
+                                  <RefreshCw size={14} /> Retry
+                                </button>
+                              </>
+                            ) : (
+                              <button type="button" className="secondary-button" onClick={() => retryResponse(messageId, false)}>
+                                <RefreshCw size={14} /> Regenerate
+                              </button>
+                            )
+                          )}
+                          <button type="button" className="icon-button" aria-label="Delete message" onClick={() => removeMessage(messageId)}>
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         <div className="status-line" aria-live="polite">
@@ -272,6 +564,20 @@ export function ChatPage() {
             }}
           />
           <div className="composer-row">
+            <select
+              aria-label="Chat connection"
+              value={activeConnectionId ?? ""}
+              onChange={(event) => {
+                const nextConnection = connections.find((connection) => connection.id === event.target.value);
+                setActiveConnectionId(nextConnection?.id ?? null);
+                setActiveModel(nextConnection?.models[0] ?? "");
+              }}
+              disabled={sending || connections.length === 0}
+            >
+              {connections.length === 0 ? <option value="">No connections</option> : connections.map((connection) => (
+                <option key={connection.id} value={connection.id}>{connection.providerName} · {connection.keyHint}</option>
+              ))}
+            </select>
             <select
               aria-label="Chat model"
               value={activeModel}
@@ -302,10 +608,10 @@ export function ChatPage() {
           </div>
         </div>
 
-        <p className="chat-footer">Conduit can make mistakes. Estimated (not exact): ~{totalTokens} tokens</p>
+        <p className="chat-footer">Conduit can make mistakes. {tokenSummary} tokens</p>
         {connectionError && <p className="error-alert" role="alert">{connectionError} <Link to="/api-config">Open API Config</Link></p>}
         {!connectionError && !loadingConnections && !activeConnection && (
-          <p className="empty-history"><Link to="/api-config">Add an API connection to begin.</Link></p>
+          <p className="error-alert" role="status">No active connection is configured. <Link to="/api-config">Open API Config</Link> to add or activate one.</p>
         )}
         {error && <p className="error-alert" role="alert">{error}</p>}
         {vaultError && <p className="error-alert" role="alert">{vaultError}</p>}

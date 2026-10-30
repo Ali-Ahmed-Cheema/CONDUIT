@@ -12,6 +12,24 @@ const SettingsPage = lazy(() => import("./pages/Settings").then((module) => ({ d
 const AboutPage = lazy(() => import("./pages/About").then((module) => ({ default: module.AboutPage })));
 const CredentialsPage = lazy(() => import("./pages/Credentials").then((module) => ({ default: module.CredentialsPage })));
 
+async function persistVault(setVaultError: (message: string | null) => void) {
+  const state = useAppStore.getState();
+  if (!state.unlocked || !state.dataKey) return;
+  try {
+    await writeVault(state.dataKey, {
+      chats: state.conversations,
+      settings: {
+        theme: state.theme,
+        soundOn: state.soundOn,
+        autoLockMinutes: state.autoLockMinutes,
+      },
+    });
+    setVaultError(null);
+  } catch (error) {
+    setVaultError(error instanceof Error ? `Could not save encrypted local data: ${error.message}` : "Could not save encrypted local data.");
+  }
+}
+
 function AppShell() {
   const unlocked = useAppStore((state) => state.unlocked);
   const theme = useAppStore((state) => state.theme);
@@ -50,23 +68,18 @@ function AppShell() {
 
   useEffect(() => {
     if (!unlocked || !dataKey) return;
-    const timer = window.setTimeout(() => {
-      const state = useAppStore.getState();
-      if (!state.unlocked || !state.dataKey) return;
-      void writeVault(state.dataKey, {
-        chats: state.conversations,
-        settings: {
-          theme: state.theme,
-          soundOn: state.soundOn,
-          autoLockMinutes: state.autoLockMinutes,
-        },
-      })
-        .then(() => setVaultError(null))
-        .catch((error: unknown) => {
-          setVaultError(error instanceof Error ? `Could not save encrypted local data: ${error.message}` : "Could not save encrypted local data.");
-        });
-    }, 300);
-    return () => window.clearTimeout(timer);
+    const timer = window.setTimeout(() => void persistVault(setVaultError), 300);
+    const flushWhenHidden = () => {
+      if (document.visibilityState === "hidden") void persistVault(setVaultError);
+    };
+    const flushOnPageHide = () => void persistVault(setVaultError);
+    document.addEventListener("visibilitychange", flushWhenHidden);
+    window.addEventListener("pagehide", flushOnPageHide);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", flushWhenHidden);
+      window.removeEventListener("pagehide", flushOnPageHide);
+    };
   }, [unlocked, dataKey, conversations, theme, soundOn, autoLockMinutes, setVaultError]);
 
   useEffect(() => {
