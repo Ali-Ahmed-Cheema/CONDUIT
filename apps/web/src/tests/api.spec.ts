@@ -4,7 +4,7 @@ import { getConnections, streamChat, validateKey } from "../api";
 describe("chat streaming client", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("sends the selected environment with API-key validation", async () => {
+  it("uses the Default environment automatically during API-key validation", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       validationId: "validation",
       provider: "openai",
@@ -14,13 +14,13 @@ describe("chat streaming client", () => {
     })));
     vi.stubGlobal("fetch", fetchMock);
 
-    await validateKey("sk-test-key", false, "Staging");
+    await validateKey("sk-test-key", false);
 
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(JSON.parse(String(request.body))).toEqual({
       apiKey: "sk-test-key",
       probeUnknown: false,
-      environment: "Staging",
+      environment: "Default",
     });
   });
 

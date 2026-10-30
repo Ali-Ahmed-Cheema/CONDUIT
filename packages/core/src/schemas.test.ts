@@ -61,13 +61,9 @@ describe("shared boundary schemas", () => {
     expect(ConnectionStoreSchema.safeParse({ connections: [record], activeId: "missing" }).success).toBe(true);
     expect(ValidateKeyRequestSchema.safeParse({ apiKey: "short" }).success).toBe(false);
     expect(ValidateKeyRequestSchema.parse({ apiKey: "long-enough-key" }).environment).toBe("Default");
-    expect(ValidateKeyRequestSchema.parse({
-      apiKey: "long-enough-key",
-      environment: "  Staging  ",
-    }).environment).toBe("Staging");
     expect(ValidateKeyRequestSchema.safeParse({
       apiKey: "long-enough-key",
-      environment: " ".repeat(41),
+      environment: "Staging",
     }).success).toBe(false);
   });
 

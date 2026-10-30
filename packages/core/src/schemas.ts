@@ -163,7 +163,7 @@ export const ChatRequestSchema = ChatGenerationOptionsSchema.extend({
 export const ValidateKeyRequestSchema = z.object({
   apiKey: z.string().max(4096).refine((value) => value.trim().length >= 8),
   probeUnknown: z.boolean().optional(),
-  environment: z.string().trim().min(1).max(40).default("Default"),
+  environment: z.literal("Default").default("Default"),
 });
 
 export const ValidationIdRequestSchema = z.object({

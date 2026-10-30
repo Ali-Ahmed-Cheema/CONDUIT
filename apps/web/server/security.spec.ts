@@ -47,10 +47,10 @@ async function apiRequest(
   return new Response(result.text ?? "", { status: result.status, headers });
 }
 
-async function validateApiKey(apiKey: string, environment?: string): Promise<string> {
+async function validateApiKey(apiKey: string): Promise<string> {
   const response = await apiRequest("/api/validate", {
     method: "POST",
-    body: { apiKey, ...(environment ? { environment } : {}) },
+    body: { apiKey },
     origin: allowedOrigin,
   });
   if (!response.ok) throw new Error(`Key validation failed with status ${response.status}.`);
@@ -403,12 +403,12 @@ describe("connection mutation concurrency", () => {
     expect(persistedStore.connections).toHaveLength(1);
   });
 
-  it("persists the selected environment when adding and replacing a connection", async () => {
+  it("assigns the Default environment when adding and replacing a connection", async () => {
     const now = Date.now();
     const clock = vi.spyOn(Date, "now").mockReturnValue(now + 61_000);
     stubModelValidation();
     try {
-      const validationId = await validateApiKey("sk-environment-add-key", "Development");
+      const validationId = await validateApiKey("sk-environment-add-key");
       const added = await apiRequest("/api/connections", {
         method: "POST",
         body: { validationId },
@@ -416,12 +416,12 @@ describe("connection mutation concurrency", () => {
       });
 
       expect(added.status).toBe(201);
-      expect(persistedStore.connections[0]?.environment).toBe("Development");
+      expect(persistedStore.connections[0]?.environment).toBe("Default");
       expect(await added.json()).toMatchObject({
-        connections: [{ environment: "Development" }],
+        connections: [{ environment: "Default" }],
       });
 
-      const replacementId = await validateApiKey("sk-environment-replacement-key", "Staging");
+      const replacementId = await validateApiKey("sk-environment-replacement-key");
       const replaced = await apiRequest(`/api/connections/${persistedStore.connections[0]?.id}`, {
         method: "PUT",
         body: { validationId: replacementId },
@@ -429,7 +429,7 @@ describe("connection mutation concurrency", () => {
       });
 
       expect(replaced.status).toBe(200);
-      expect(persistedStore.connections[0]?.environment).toBe("Staging");
+      expect(persistedStore.connections[0]?.environment).toBe("Default");
     } finally {
       clock.mockRestore();
     }

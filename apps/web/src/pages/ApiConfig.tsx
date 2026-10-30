@@ -43,7 +43,6 @@ export function ApiConfigPage() {
   const setActiveConnectionId = useAppStore((state) => state.setActiveConnectionId);
   const setActiveModel = useAppStore((state) => state.setActiveModel);
   const [draft, setDraft] = useState("");
-  const [environment, setEnvironment] = useState("Default");
   const [allowUnknownProbe, setAllowUnknownProbe] = useState(false);
   const [replacingId, setReplacingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,10 +77,6 @@ export function ApiConfigPage() {
     event.preventDefault();
     const trimmed = draft.trim();
     const hintedProvider = detectProvider(trimmed);
-    if (!environment.trim() || environment.trim().length > 40) {
-      setError("Enter an environment name between 1 and 40 characters.");
-      return;
-    }
     if (trimmed.length < 8 || trimmed.length > 4096) {
       setError("Enter an AI key between 8 and 4096 characters.");
       return;
@@ -96,7 +91,7 @@ export function ApiConfigPage() {
     setStatusMessage("");
     try {
       const saveWithValidation = async () => {
-        const validation = await validateKey(trimmed, !hintedProvider && allowUnknownProbe, environment.trim());
+      const validation = await validateKey(trimmed, !hintedProvider && allowUnknownProbe);
         return replacingId
           ? replaceConnection(replacingId, validation.validationId)
           : addConnection(validation.validationId);
@@ -198,7 +193,6 @@ export function ApiConfigPage() {
   const cancelReplacement = () => {
     setReplacingId(null);
     setDraft("");
-    setEnvironment("Default");
     setAllowUnknownProbe(false);
     setError("");
   };
@@ -206,13 +200,6 @@ export function ApiConfigPage() {
   const replacing = connections.find((connection) => connection.id === replacingId);
   const trimmedDraft = draft.trim();
   const hintedProvider = detectProvider(trimmedDraft);
-  const groupedConnections = connections.reduce((groups, connection) => {
-    const name = connection.environment?.trim() || "Default";
-    const group = groups.get(name) ?? [];
-    group.push(connection);
-    groups.set(name, group);
-    return groups;
-  }, new Map<string, typeof connections>());
 
   return (
     <div className="page-shell">
@@ -221,17 +208,6 @@ export function ApiConfigPage() {
         <h1>Connect an AI service</h1>
         <p className="page-description">Add your AI key to connect a service. Your key is checked and saved on this device.</p>
 
-        <label className="model-select-label">
-          Environment
-          <input
-            aria-label="Environment"
-            value={environment}
-            onChange={(event) => setEnvironment(event.target.value)}
-            placeholder="e.g. Development, Staging, Production"
-            maxLength={40}
-            disabled={busy}
-          />
-        </label>
         <form className="config-input glass" onSubmit={(event) => void submitKey(event)}>
           <label className="sr-only" htmlFor="api-key">{replacing ? `Replacement key for ${replacing.providerName}` : "Your AI key"}</label>
           <input
@@ -287,10 +263,10 @@ export function ApiConfigPage() {
             <p className="empty-history">Loading saved connections...</p>
           ) : connections.length === 0 ? (
             <p className="empty-history">No API connections saved. Add a valid provider key to start chatting.</p>
-          ) : [...groupedConnections.entries()].map(([environmentName, environmentConnections]) => (
-            <section className="connection-environment" key={environmentName} aria-label={`${environmentName} environment`}>
-              <h2>{environmentName}</h2>
-              {environmentConnections.map((connection) => {
+          ) : (
+            <section className="connection-environment" aria-label="Default environment">
+              <h2>Default</h2>
+              {connections.map((connection) => {
                 const isActive = connection.id === activeConnectionId;
                 return (
                   <GlassCard key={connection.id} className={`key-card ${isActive ? "on" : ""}`}>
@@ -336,7 +312,6 @@ export function ApiConfigPage() {
                         className="secondary-button"
                         onClick={() => {
                           setReplacingId(connection.id);
-                          setEnvironment(connection.environment ?? "Default");
                           setDraft("");
                           setError("");
                         }}
@@ -352,7 +327,7 @@ export function ApiConfigPage() {
                 );
               })}
             </section>
-          ))}
+          )}
         </div>
       </main>
     </div>

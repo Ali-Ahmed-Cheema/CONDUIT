@@ -92,12 +92,11 @@ describe("API config page", () => {
     renderConfig();
     await screen.findByText(/No API connections saved/);
 
-    fireEvent.change(screen.getByLabelText("Environment"), { target: { value: "Development" } });
     fireEvent.change(screen.getByLabelText("Your AI key"), { target: { value: "sk-mock-provider-key" } });
     expect(screen.getByText(/Likely API type: OpenAI chat service/)).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Check and save" }));
 
-    expect(mocks.validateKey).toHaveBeenCalledWith("sk-mock-provider-key", false, "Development");
+    expect(mocks.validateKey).toHaveBeenCalledWith("sk-mock-provider-key", false);
     expect(mocks.addConnection).toHaveBeenCalledWith("validation");
     expect((await screen.findByRole("status")).textContent).toContain("OpenAI connection validated and saved.");
     expect(useAppStore.getState().activeConnectionId).toBe(first.id);
@@ -130,7 +129,7 @@ describe("API config page", () => {
 
     await user.click(screen.getByRole("checkbox", { name: /consent to sending this key/i }));
     await user.click(screen.getByRole("button", { name: "Check and save" }));
-    expect(mocks.validateKey).toHaveBeenCalledWith("custom-provider-key", true, "Default");
+    expect(mocks.validateKey).toHaveBeenCalledWith("custom-provider-key", true);
   });
 
   it("replaces a selected connection only after validating the replacement key", async () => {
@@ -143,21 +142,23 @@ describe("API config page", () => {
     fireEvent.change(screen.getByLabelText("Replacement key for OpenAI"), { target: { value: "sk-replacement-key" } });
     await user.click(screen.getByRole("button", { name: "Check and replace" }));
 
-    expect(mocks.validateKey).toHaveBeenCalledWith("sk-replacement-key", false, "Default");
+    expect(mocks.validateKey).toHaveBeenCalledWith("sk-replacement-key", false);
     expect(mocks.replaceConnection).toHaveBeenCalledWith(first.id, "validation");
   });
 
-  it("groups saved API connections by environment and keeps legacy keys in Default", async () => {
+  it("shows all saved keys in Default, including keys with older environment labels", async () => {
     const development = { ...first, id: "development", environment: "Development" };
     const production = { ...second, environment: "Production" };
     mocks.getConnections.mockResolvedValue(response([first, development, production], first.id));
     renderConfig();
 
     expect(await screen.findByRole("region", { name: "Default environment" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Development environment" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Production environment" })).toBeTruthy();
-    expect(within(screen.getByRole("region", { name: "Development environment" })).getByRole("heading", { name: "OpenAI" })).toBeTruthy();
-    expect(within(screen.getByRole("region", { name: "Production environment" })).getByRole("heading", { name: "OpenAI second" })).toBeTruthy();
+    const defaultEnvironment = screen.getByRole("region", { name: "Default environment" });
+    expect(within(defaultEnvironment).getAllByRole("heading", { name: "OpenAI" })).toHaveLength(2);
+    expect(within(defaultEnvironment).getByRole("heading", { name: "OpenAI second" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Development environment" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Production environment" })).toBeNull();
+    expect(screen.queryByLabelText("Environment")).toBeNull();
   });
 
   it("activates, refreshes, and deletes a saved connection with clear feedback", async () => {

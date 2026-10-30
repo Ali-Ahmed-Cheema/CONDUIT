@@ -43,11 +43,9 @@ key formats as you type; the provider is confirmed by validation before the key
 is saved. Unknown formats require consent before CONDUIT checks supported chat
 providers. This is not a universal API credential connector: payment, cloud,
 database, and other non-chat credentials require dedicated provider
-integrations and cannot be used for chat. Label keys with an environment name
-such as Development, Staging, or Production to group them in the saved
-connections list. Existing connections without an environment stay under
-Default; the label organizes keys but does not change provider permissions or
-the provider account's environment.
+integrations and cannot be used for chat. All keys are saved in the single
+Default environment automatically; the app does not ask users to configure
+environments.
 
 The local API listens on `127.0.0.1:3001` and the web app normally runs at `http://localhost:5173`.
 

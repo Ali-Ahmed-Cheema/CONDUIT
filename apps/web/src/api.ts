@@ -48,10 +48,10 @@ async function request<T>(path: string, schema: RuntimeSchema<T>, init?: Request
 
 export const getConnections = () => request("/api/connections", ConnectionsResponseSchema);
 
-export const validateKey = (apiKey: string, probeUnknown: boolean, environment = "Default") =>
+export const validateKey = (apiKey: string, probeUnknown: boolean) =>
   request("/api/validate", ValidationResultSchema, {
     method: "POST",
-    body: JSON.stringify({ apiKey, probeUnknown, environment }),
+    body: JSON.stringify({ apiKey, probeUnknown, environment: "Default" }),
   });
 
 export const addConnection = (validationId: string) =>

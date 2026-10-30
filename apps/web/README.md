@@ -53,7 +53,7 @@ corepack pnpm test
 
 `corepack pnpm start:api` starts only the local API service. The API service must remain available for validation and chat.
 
-The web and reference development servers bind to `127.0.0.1` by default. Set `CONDUIT_EXPOSE=1` before starting a Vite server only when LAN access is intended.
+All API keys are saved in the single **Default** environment automatically; no environment setup is needed. The web and reference development servers bind to `127.0.0.1` by default. Set `CONDUIT_EXPOSE=1` before starting a Vite server only when LAN access is intended.
 
 ## Security notes
 
