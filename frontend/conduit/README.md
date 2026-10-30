@@ -14,26 +14,22 @@ Generate a private 32-byte encryption key from the repository root, add it to `f
 ```powershell
 # Run from the repository root.
 $key = npm run --silent generate:key
-Set-Location frontend\conduit
-$lines = if (Test-Path .env) { Get-Content .env | Where-Object { $_ -notmatch '^CONDUIT_ENCRYPTION_KEY=' } } else { @() }
+$envFile = "frontend\conduit\.env"
+$lines = if (Test-Path $envFile) { Get-Content $envFile | Where-Object { $_ -notmatch '^CONDUIT_ENCRYPTION_KEY=' } } else { @() }
 $lines += "CONDUIT_ENCRYPTION_KEY=$key"
-$lines | Set-Content -Encoding ascii .env
-Remove-Variable key, lines
+$lines | Set-Content -Encoding ascii $envFile
+Remove-Variable key, lines, envFile
 ```
 
 The API exits with a clear error if the key is missing or is not valid base64 encoding of exactly 32 bytes. Keep it safe: losing it makes saved provider connections unreadable. The service listens on `127.0.0.1:3001` and writes encrypted connection records to `data/connections.json`.
 
-## Configure the lock-screen verifier
+## Set up the vault
 
-The repository contains only a PBKDF2 verifier, not the lock password. To replace the verifier, set `CONDUIT_PW` to a private password, run the generator, and copy its output to `src/crypto/config.ts`:
+On first launch, choose a vault password in the app. A random salt and password verifier are stored in IndexedDB; chat history and settings are encrypted there with a password-derived AES-GCM key. Existing vaults created by earlier releases are detected and migrated after entering the previous password and selecting a new one. The old vault remains intact if the migration cannot be committed.
 
-```powershell
-$env:CONDUIT_PW = "choose-a-private-password"
-npm run generate:verify
-Remove-Item Env:CONDUIT_PW
-```
+Use **Settings → Change vault password** to re-encrypt the existing vault. Export or import a single encrypted backup from the same page; imports can merge or replace chats and settings.
 
-Do not commit or share the password. Changing the verifier does not migrate data encrypted with the previous password-derived key; export or clear the old vault before changing it.
+Password lockout is stored locally in IndexedDB. Its exponential delay is a UX guardrail, not a security boundary; anyone with access to the browser profile or source can bypass it. A forgotten password cannot recover the local vault.
 
 ## Run locally
 
@@ -42,7 +38,7 @@ npm install
 npm run dev
 ```
 
-`npm run dev` starts both the API service and Vite. Open the Vite URL printed in the terminal (normally `http://localhost:5173`). Unlock with the password used to generate the verifier, then add a real provider key in **API Config**. The key is validated against its provider before it can be saved.
+`npm run dev` starts both the API service and Vite. Open the Vite URL printed in the terminal (normally `http://localhost:5173`). Set up or unlock the vault, then add a real provider key in **API Config**. The key is validated against its provider before it can be saved.
 
 Supported providers are OpenAI, Anthropic, Google Gemini, Groq, OpenRouter, Hugging Face Inference Providers, and Mistral AI. Hugging Face tokens must have the Inference Providers permission; paste a personal access token beginning with `hf_` and the app will validate it and load the chat models available to that token. Mistral API keys do not have a unique prefix, so enable the consent checkbox when adding one; the local service will check it against the supported providers. Other providers require their own explicit integration; an unknown key can only be probed against the listed providers and is not guaranteed to work just because it is an API key.
 
@@ -64,5 +60,6 @@ The web and reference development servers bind to `127.0.0.1` by default. Set `C
 ## Security notes
 
 - Provider API keys are sent only to the local API service for validation and chat. Saved keys are encrypted with AES-256-GCM using the private key in `.env`.
-- Chat history and settings are encrypted in IndexedDB with AES-GCM. The data-encryption key is held in memory only while unlocked.
-- The lock screen, verifier, and local service are intended for a single-device local prototype, not as a production authentication boundary. Do not expose the local API service to an untrusted network.
+- Chat history and settings are encrypted in IndexedDB with AES-GCM. Password salts and a PBKDF2 verifier are stored there; the data-encryption key is held in memory only while unlocked.
+- The lockout delay is a local UX guardrail, not an authentication boundary. Anyone with access to the browser profile or source can bypass it. A forgotten vault password has no recovery; keep an encrypted backup and the API encryption key safe.
+- The local API binds only to loopback. Do not expose it to an untrusted network.

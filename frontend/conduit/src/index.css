@@ -946,6 +946,22 @@ textarea {
   font-size: 1rem;
 }
 
+.settings-block form {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-block label {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-block input,
+.settings-block select {
+  width: 100%;
+  min-width: 0;
+}
+
 .segmented {
   display: flex;
   gap: 8px;

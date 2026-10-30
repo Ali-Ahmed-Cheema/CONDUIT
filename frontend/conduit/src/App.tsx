@@ -51,7 +51,16 @@ function AppShell() {
   useEffect(() => {
     if (!unlocked || !dataKey) return;
     const timer = window.setTimeout(() => {
-      void writeVault(dataKey, { chats: conversations, settings: { theme, soundOn, autoLockMinutes } })
+      const state = useAppStore.getState();
+      if (!state.unlocked || !state.dataKey) return;
+      void writeVault(state.dataKey, {
+        chats: state.conversations,
+        settings: {
+          theme: state.theme,
+          soundOn: state.soundOn,
+          autoLockMinutes: state.autoLockMinutes,
+        },
+      })
         .then(() => setVaultError(null))
         .catch((error: unknown) => {
           setVaultError(error instanceof Error ? `Could not save encrypted local data: ${error.message}` : "Could not save encrypted local data.");

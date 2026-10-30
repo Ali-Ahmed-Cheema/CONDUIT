@@ -21,27 +21,20 @@ The chat app's navigation menu includes **Credential reference** for the all-typ
 
 ## Set up chat
 
-The local API service reads its encryption key from `frontend/conduit/.env`. If `CONDUIT_ENCRYPTION_KEY` is not set there, create a private 32-byte key from PowerShell at the repository root:
+The local API service reads its encryption key from `frontend/conduit/.env`. Generate a private 32-byte key and add it to that file:
 
 ```powershell
-$bytes = [byte[]]::new(32)
-[System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-$key = [Convert]::ToBase64String($bytes)
+$key = npm run --silent generate:key
 $envFile = "frontend\conduit\.env"
 $lines = if (Test-Path $envFile) { Get-Content $envFile | Where-Object { $_ -notmatch '^CONDUIT_ENCRYPTION_KEY=' } } else { @() }
 $lines += "CONDUIT_ENCRYPTION_KEY=$key"
 $lines | Set-Content -Encoding ascii $envFile
-Remove-Variable key, bytes, lines, envFile
+Remove-Variable key, lines, envFile
 ```
 
-Unlock the app with the password used to create its local vault verifier. To set a new password, first export or clear any vault data encrypted with the old password. Then run the verifier generator from the app directory and replace the `KDF_CONFIG` values in `src/crypto/config.ts` with its output:
+On first launch, choose a vault password in the app. Existing vaults from earlier releases are detected and migrated after entering the previous password and choosing a new one; the old vault remains intact if the migration cannot be committed. Use **Settings → Change vault password** to re-encrypt an existing vault, or export/import an encrypted backup from Settings.
 
-```powershell
-Set-Location frontend\conduit
-$env:CONDUIT_PW = Read-Host "Choose a private vault password"
-npm run generate:verify
-Remove-Item Env:CONDUIT_PW
-```
+The exponential password lockout is stored locally in IndexedDB. It is a UX guardrail, not a security boundary. A forgotten password cannot recover the local vault.
 
 After unlocking, open **API Config** and add a real supported provider key. CONDUIT validates it with the provider and stores it encrypted in the local API service. Select the connection and a chat model, return to the chat, and send a message. Provider usage may incur charges.
 

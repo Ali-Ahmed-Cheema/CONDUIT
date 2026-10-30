@@ -1,6 +1,12 @@
-import { KDF_CONFIG } from "./config";
+import { readLockoutRecord, writeLockoutRecord, type LockoutRecord, type VaultSetup } from "./vault";
 
-const KEY = "conduit-lockout";
+const LEGACY_LOCKOUT_KEY = "conduit-lockout";
+const DEFAULT_LOCKOUT: LockoutRecord = { failures: 0, until: 0 };
+let lockoutState = DEFAULT_LOCKOUT;
+let lockoutReady: Promise<void> | null = null;
+
+const hexToBytes = (hex: string) =>
+  new Uint8Array(hex.match(/.{1,2}/g)?.map((chunk) => Number.parseInt(chunk, 16)) ?? []);
 
 export const constantTimeEquals = (a: string, b: string) => {
   const aBytes = new TextEncoder().encode(a);
@@ -12,74 +18,114 @@ export const constantTimeEquals = (a: string, b: string) => {
   return diff === 0;
 };
 
-export const getLockoutState = () => {
-  const raw = localStorage.getItem(KEY);
-  if (!raw) return { failures: 0, until: 0 };
-
+export async function derivePasswordHash(password: string, salt: string): Promise<string> {
+  const worker = new Worker(new URL("./kdf.worker.ts", import.meta.url), { type: "module" });
   try {
-    const parsed = JSON.parse(raw) as { failures?: number; until?: number };
-    return {
-      failures: Number(parsed.failures ?? 0),
-      until: Number(parsed.until ?? 0),
-    };
-  } catch {
-    return { failures: 0, until: 0 };
+    return await new Promise<string>((resolve, reject) => {
+      worker.onmessage = (event) => {
+        const hex = event.data?.hex;
+        if (typeof hex !== "string" || !/^[0-9a-f]{64}$/i.test(hex)) {
+          reject(new Error("Password derivation returned invalid data."));
+          return;
+        }
+        resolve(hex);
+      };
+      worker.onerror = () => reject(new Error("Password derivation failed."));
+      worker.postMessage({ password, salt });
+    });
+  } finally {
+    worker.terminate();
   }
-};
+}
 
-export const setLockoutState = (failures: number, until: number) => {
-  localStorage.setItem(KEY, JSON.stringify({ failures, until }));
+async function importDataKey(hex: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey("raw", hexToBytes(hex), "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+
+export async function deriveDataKey(password: string, saltData: string): Promise<CryptoKey> {
+  return importDataKey(await derivePasswordHash(password, saltData));
+}
+
+export async function verifyPassword(password: string, setup: VaultSetup): Promise<boolean> {
+  const actual = await derivePasswordHash(password, setup.saltVerify);
+  return constantTimeEquals(actual, setup.verifier);
+}
+
+export async function createVaultCredentials(password: string): Promise<{ setup: VaultSetup; dataKey: CryptoKey }> {
+  const saltVerify = crypto.getRandomValues(new Uint8Array(16));
+  const saltData = crypto.getRandomValues(new Uint8Array(16));
+  const toHex = (bytes: Uint8Array) =>
+    Array.from(bytes).map((value) => value.toString(16).padStart(2, "0")).join("");
+  const [verifier, dataKeyHex] = await Promise.all([
+    derivePasswordHash(password, toHex(saltVerify)),
+    derivePasswordHash(password, toHex(saltData)),
+  ]);
+  return {
+    setup: {
+      version: 1,
+      saltVerify: toHex(saltVerify),
+      verifier,
+      saltData: toHex(saltData),
+    },
+    dataKey: await importDataKey(dataKeyHex),
+  };
+}
+
+export async function initializeLockoutState(): Promise<void> {
+  if (!lockoutReady) {
+    lockoutReady = (async () => {
+      const saved = await readLockoutRecord();
+      if (saved) {
+        lockoutState = saved;
+        return;
+      }
+
+      const legacy = window.localStorage.getItem(LEGACY_LOCKOUT_KEY);
+      let migrated = DEFAULT_LOCKOUT;
+      if (legacy) {
+        try {
+          const parsed = JSON.parse(legacy) as { failures?: unknown; until?: unknown };
+          if (
+            typeof parsed.failures === "number" &&
+            Number.isSafeInteger(parsed.failures) &&
+            parsed.failures >= 0 &&
+            typeof parsed.until === "number" &&
+            Number.isFinite(parsed.until) &&
+            parsed.until >= 0
+          ) {
+            migrated = { failures: parsed.failures, until: parsed.until };
+          }
+        } catch {
+          migrated = DEFAULT_LOCKOUT;
+        }
+      }
+      await writeLockoutRecord(migrated);
+      window.localStorage.removeItem(LEGACY_LOCKOUT_KEY);
+      lockoutState = migrated;
+    })();
+  }
+  await lockoutReady;
+}
+
+export const getLockoutState = () => lockoutState;
+
+export const setLockoutState = async (failures: number, until: number) => {
+  await initializeLockoutState();
+  const next = { failures, until };
+  await writeLockoutRecord(next);
+  lockoutState = next;
 };
 
 export const resetLockoutState = () => setLockoutState(0, 0);
 
-export const getLockoutRemainingSeconds = () => {
-  const { until } = getLockoutState();
-  const remaining = Math.max(0, Math.ceil((until - Date.now()) / 1000));
-  return remaining;
-};
+export const getLockoutRemainingSeconds = () => Math.max(0, Math.ceil((lockoutState.until - Date.now()) / 1000));
 
-export const isLockoutActive = () => {
-  const { until } = getLockoutState();
-  return until > Date.now();
-};
+export const isLockoutActive = () => lockoutState.until > Date.now();
 
-export const bumpLockout = () => {
-  const state = getLockoutState();
-  const failures = state.failures + 1;
+export const bumpLockout = async () => {
+  await initializeLockoutState();
+  const failures = lockoutState.failures + 1;
   const until = failures >= 3 ? Date.now() + Math.min(300, 5 * 2 ** (failures - 3)) * 1000 : 0;
-  setLockoutState(failures, until);
+  await setLockoutState(failures, until);
   return until;
-};
-
-export const verifyPassword = async (password: string) => {
-  const worker = new Worker(new URL("./kdf.worker.ts", import.meta.url), { type: "module" });
-  let result: string;
-  try {
-    result = await new Promise<string>((resolve, reject) => {
-      worker.onmessage = (event) => resolve(event.data.hex as string);
-      worker.onerror = () => reject(new Error("Password verification failed."));
-      worker.postMessage({ password, salt: KDF_CONFIG.saltVerify });
-    });
-  } finally {
-    worker.terminate();
-  }
-  return constantTimeEquals(result, KDF_CONFIG.verifier);
-};
-
-export const deriveDataKey = async (password: string) => {
-  const worker = new Worker(new URL("./kdf.worker.ts", import.meta.url), { type: "module" });
-  let result: string;
-  try {
-    result = await new Promise<string>((resolve, reject) => {
-      worker.onmessage = (event) => resolve(event.data.hex as string);
-      worker.onerror = () => reject(new Error("Key derivation failed."));
-      worker.postMessage({ password, salt: KDF_CONFIG.saltData });
-    });
-  } finally {
-    worker.terminate();
-  }
-
-  const bytes = new Uint8Array(result.match(/.{1,2}/g)?.map((chunk) => Number.parseInt(chunk, 16)) ?? []);
-  return crypto.subtle.importKey("raw", bytes, "AES-GCM", false, ["encrypt", "decrypt"]);
 };
