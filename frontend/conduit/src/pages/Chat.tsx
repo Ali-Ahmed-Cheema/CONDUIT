@@ -327,8 +327,10 @@ export function ChatPage() {
     link.href = url;
     const safeTitle = currentConversation.title.replace(/[\\/:*?"<>|]+/g, "-") || "conversation";
     link.download = `${safeTitle}.${format === "json" ? "json" : "md"}`;
+    document.body.append(link);
     link.click();
-    URL.revokeObjectURL(url);
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
   };
 
   const modelLabel = activeConnection
