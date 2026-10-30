@@ -1,0 +1,25 @@
+services:
+  conduit:
+    build: .
+    env_file:
+      - .env
+    environment:
+      PORT: "3001"
+      CONDUIT_EXPOSE: "1"
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - conduit-data:/app/frontend/conduit/data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  conduit-data:

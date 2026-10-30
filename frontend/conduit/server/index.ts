@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { config as loadDotenv } from "dotenv";
 import express from "express";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
@@ -25,10 +26,12 @@ import {
   redactApiKey,
   type Provider,
 } from "./providers";
-import { apiSecurityHeaders } from "./securityHeaders";
+import { apiSecurityHeaders, staticSecurityHeaders } from "./securityHeaders";
 
+loadDotenv({ path: resolve(process.cwd(), "../../.env") });
 const app = express();
 const port = Number(process.env.PORT ?? 3001);
+const productionMode = process.env.NODE_ENV === "production" || process.argv.includes("--production");
 export { app };
 const candidates = new Map<
   string,
@@ -55,6 +58,7 @@ async function withStoreMutationLock<T>(operation: () => Promise<T>): Promise<T>
 app.disable("x-powered-by");
 app.use((_request, response, next) => {
   response.set(apiSecurityHeaders);
+  response.set("Cache-Control", "no-store");
   next();
 });
 app.use((request, response, next) => {
@@ -131,7 +135,6 @@ function waitBeforeRetry(delayMs: number, signal: AbortSignal): Promise<void> {
       reject(error);
       return;
     }
-    let timer: ReturnType<typeof setTimeout>;
     const onAbort = () => {
       clearTimeout(timer);
       signal.removeEventListener("abort", onAbort);
@@ -139,7 +142,7 @@ function waitBeforeRetry(delayMs: number, signal: AbortSignal): Promise<void> {
       error.name = "AbortError";
       reject(error);
     };
-    timer = setTimeout(() => {
+    const timer = setTimeout(() => {
       signal.removeEventListener("abort", onAbort);
       resolve();
     }, delayMs);
@@ -712,7 +715,36 @@ app.post("/api/chat/stream", rateLimit(30, 60_000), async (request, response) =>
   }
 });
 
-
+if (productionMode) {
+  const distDirectory = resolve(process.cwd(), "dist");
+  app.use(express.static(distDirectory, {
+    setHeaders(response, filePath) {
+      response.set(staticSecurityHeaders);
+      if (/(?:^|[\\/])(?:index\.html|sw\.js|workbox-[^\\/]+\.js|manifest\.webmanifest)$/i.test(filePath)) {
+        response.set("Cache-Control", "no-cache");
+      } else if (/[\\/]assets[\\/]/.test(filePath)) {
+        response.set("Cache-Control", "public, max-age=31536000, immutable");
+      } else {
+        response.set("Cache-Control", "public, max-age=86400");
+      }
+    },
+  }));
+  app.use((request, response, next) => {
+    if (
+      (request.method !== "GET" && request.method !== "HEAD") ||
+      request.path === "/api" ||
+      request.path.startsWith("/api/")
+    ) {
+      next();
+      return;
+    }
+    response.set(staticSecurityHeaders);
+    response.set("Cache-Control", "no-cache");
+    response.sendFile(resolve(distDirectory, "index.html"), (error) => {
+      if (error) next(error);
+    });
+  });
+}
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
   if (
@@ -737,8 +769,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     process.exitCode = 1;
   }
   if (process.exitCode !== 1) {
-    app.listen(port, "127.0.0.1", () => {
-      console.log(`CONDUIT API listening on http://127.0.0.1:${port}`);
+    const host = process.env.CONDUIT_EXPOSE === "1" ? "0.0.0.0" : "127.0.0.1";
+    app.listen(port, host, () => {
+      console.log(`CONDUIT listening on http://127.0.0.1:${port}`);
     });
   }
 }

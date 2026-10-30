@@ -21,7 +21,6 @@ interface StoreFile {
 }
 
 const storePath = resolve(process.cwd(), "data", "connections.json");
-const defaultStore: StoreFile = { connections: [], activeId: null };
 
 function encryptionKey(): Buffer {
   const encoded = process.env.CONDUIT_ENCRYPTION_KEY;

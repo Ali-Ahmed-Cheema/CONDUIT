@@ -8,7 +8,9 @@
     "dev:api": "tsx watch server/index.ts",
     "dev:web": "vite",
     "start:api": "tsx server/index.ts",
+    "start": "tsx server/index.ts --production",
     "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
     "test": "vitest run",
     "generate:verify": "node scripts/generate-verifier.mjs",
     "generate:key": "node scripts/generate-key.mjs"

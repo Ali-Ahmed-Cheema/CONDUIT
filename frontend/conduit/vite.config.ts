@@ -10,6 +10,11 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: "autoUpdate",
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,webp,woff,woff2,webmanifest}"],
+        navigateFallbackDenylist: [/^\/api(?:\/|$)/],
+        runtimeCaching: [],
+      },
       manifest: {
         name: "CONDUIT V3.0",
         short_name: "Conduit",
@@ -17,6 +22,24 @@ export default defineConfig({
         display: "standalone",
         background_color: "#ffffff",
         theme_color: "#000000",
+        icons: [
+          {
+            src: "/icons/conduit-192.png",
+            sizes: "192x192",
+            type: "image/png",
+          },
+          {
+            src: "/icons/conduit-512.png",
+            sizes: "512x512",
+            type: "image/png",
+          },
+          {
+            src: "/icons/conduit-maskable-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
+        ],
       },
     }),
   ],

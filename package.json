@@ -9,8 +9,11 @@
     "dev:web": "npm --prefix frontend/conduit run dev:web",
     "dev:reference": "vite --port 5174",
     "start:api": "npm --prefix frontend/conduit run start:api",
+    "start": "npm --prefix frontend/conduit run start",
     "build": "npm --prefix frontend/conduit run build",
     "test": "vitest run",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "npm --prefix frontend/conduit run typecheck",
     "preview": "npm --prefix frontend/conduit run preview",
     "generate:verify": "npm --prefix frontend/conduit run generate:verify",
     "generate:key": "node frontend/conduit/scripts/generate-key.mjs"
@@ -42,6 +45,7 @@
     "prettier": "^3.0.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.0",
+    "typescript-eslint": "^8.72.1",
     "vite": "^6.3.5",
     "vite-plugin-pwa": "^2.0.0",
     "vitest": "^4.1.11"
