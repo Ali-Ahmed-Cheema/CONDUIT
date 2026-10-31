@@ -149,6 +149,10 @@ export function extractGeneratedCodeFiles(markdown: string): GeneratedCodeFile[]
     const tokens = infoTokens(info);
     const languageToken = tokens.find((token) => !token.includes("=")) ?? "";
     const language = tokenValue(languageToken);
+    if (language.toLowerCase() === "genui") {
+      index = closingIndex;
+      continue;
+    }
     let name = filePathFromInfo(info, language);
     if (!name) name = `generated.${extensionForLanguage(language)}`;
     name = uniqueName(name, usedNames);

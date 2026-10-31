@@ -10,6 +10,7 @@ import {
   type GeneratedCodeFile,
 } from "../lib/generatedFiles";
 import { CodePreview } from "./CodePreview";
+import { GenerativeUI, parseGenUI } from "./GenerativeUI";
 
 function getTextContent(children: ReactNode): string {
   return Children.toArray(children)
@@ -94,9 +95,11 @@ function TableWithCopy({ children, onCopyError }: { children: ReactNode; onCopyE
 export function MarkdownContent({
   content,
   onCopyError,
+  onAction,
 }: {
   content: string;
   onCopyError: () => void;
+  onAction?: (prompt: string) => void;
 }) {
   const [downloadFailed, setDownloadFailed] = useState(false);
   const generatedFiles = extractGeneratedCodeFiles(content);
@@ -123,8 +126,6 @@ export function MarkdownContent({
       return <TableWithCopy onCopyError={onCopyError}>{children}</TableWithCopy>;
     },
     pre({ children }) {
-      const fileIndex = renderedCodeBlockIndex;
-      renderedCodeBlockIndex += 1;
       const codeElement = Children.toArray(children).find((child) =>
         isValidElement<{ className?: string; children?: ReactNode }>(child),
       );
@@ -133,7 +134,15 @@ export function MarkdownContent({
         : null;
       const code = getTextContent(codeProps?.children ?? children);
       const language = codeProps?.className?.match(/language-([^\s]+)/)?.[1];
-      const generatedFile = generatedFiles[fileIndex];
+      const isGenUI = language?.toLowerCase() === "genui";
+      if (isGenUI) {
+        const components = parseGenUI(code);
+        if (components) return <GenerativeUI components={components} onAction={onAction} />;
+      }
+
+      const fileIndex = renderedCodeBlockIndex;
+      if (!isGenUI) renderedCodeBlockIndex += 1;
+      const generatedFile = isGenUI ? undefined : generatedFiles[fileIndex];
       let fileName = generatedFileNameForCode(language, generatedFile?.name);
       if (usedNames.has(fileName.toLowerCase())) {
         const lastDot = fileName.lastIndexOf(".");
@@ -151,7 +160,6 @@ export function MarkdownContent({
           <div className="code-toolbar">
             <span>{language ?? "Code"}</span>
             <div className="code-toolbar-actions">
-              <CodePreview code={code} language={language} />
               <CopyCodeButton code={code} onCopyError={onCopyError} />
               <button
                 type="button"
@@ -186,6 +194,7 @@ export function MarkdownContent({
                   <span className="visually-hidden">ZIP</span>
                 </button>
               )}
+              <CodePreview code={code} language={language} />
             </div>
           </div>
           <pre><code className={codeProps?.className}>{codeProps?.children ?? children}</code></pre>

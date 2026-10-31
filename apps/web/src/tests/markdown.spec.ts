@@ -3,9 +3,11 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatTableAsTsv, MarkdownContent } from "../components/MarkdownContent";
 import { CodePreview, createCodePreviewDocument } from "../components/CodePreview";
+import { extractGeneratedCodeFiles } from "../lib/generatedFiles";
 
 afterEach(cleanup);
 
@@ -46,6 +48,92 @@ describe("chat Markdown rendering", () => {
     expect(markup).toContain('aria-label="Download generated.ts"');
   });
 
+  it("renders a GenUI calculator and updates its result as inputs change", async () => {
+    const user = userEvent.setup();
+    const content = [
+      "Adjust your marks to calculate your percentage.",
+      "",
+      "```genui",
+      JSON.stringify({
+        type: "calculator",
+        title: "Student Grade Calculator",
+        fields: [
+          { name: "obtained", label: "Obtained marks", type: "number", value: 85, min: 0, max: 150 },
+          { name: "total", label: "Total marks", type: "range", value: 100, min: 1, max: 150 },
+        ],
+        calculation: { label: "Percentage", numerator: "obtained", denominator: "total", decimals: 2 },
+      }),
+      "```",
+    ].join("\n");
+    render(createElement(MarkdownContent, { content, onCopyError: () => {} }));
+
+    expect(screen.getByText("85.00%")).toBeTruthy();
+    await user.clear(screen.getByRole("spinbutton", { name: "Obtained marks" }));
+    await user.type(screen.getByRole("spinbutton", { name: "Obtained marks" }), "90");
+    expect(screen.getByText("90.00%")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Download genui" })).toBeNull();
+  });
+
+  it("submits generated form values as a follow-up chat action", async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn();
+    const content = `\`\`\`genui
+${JSON.stringify({
+  type: "form",
+  title: "Trip planner",
+  fields: [
+    { name: "destination", label: "Destination", type: "text", value: "Paris" },
+    { name: "days", label: "Days", type: "number", value: 3 },
+  ],
+  submitLabel: "Plan my trip",
+})}
+\`\`\``;
+    render(createElement(MarkdownContent, { content, onCopyError: () => {}, onAction }));
+
+    await user.click(screen.getByRole("button", { name: "Plan my trip" }));
+    expect(onAction).toHaveBeenCalledWith("Use these form values for Trip planner:\nDestination: Paris\nDays: 3");
+    expect(screen.getByRole("status").textContent).toBe("Sent to the conversation.");
+  });
+
+  it("renders generated charts and tables and wires action buttons to chat", async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn();
+    const content = `\`\`\`genui
+${JSON.stringify({
+  type: "ui",
+  components: [
+    { type: "chart", title: "Quarterly revenue", labels: ["Q1", "Q2"], values: [12, 18] },
+    { type: "table", title: "Top regions", columns: ["Region", "Sales"], rows: [["North", 18]] },
+    { type: "button", label: "Explain the chart", prompt: "Explain this chart in detail." },
+  ],
+})}
+\`\`\``;
+    render(createElement(MarkdownContent, { content, onCopyError: () => {}, onAction }));
+
+    expect(screen.getByRole("img", { name: "Quarterly revenue" })).toBeTruthy();
+    expect(screen.getByRole("table").textContent).toContain("North");
+    await user.click(screen.getByRole("button", { name: "Explain the chart" }));
+    expect(onAction).toHaveBeenCalledWith("Explain this chart in detail.");
+  });
+
+  it("does not execute unsupported GenUI content or treat it as a generated file", () => {
+    const content = `\`\`\`genui
+{"type":"script","code":"alert(1)"}
+\`\`\`
+
+\`\`\`typescript
+const answer = 42;
+\`\`\``;
+    const { container } = render(createElement(MarkdownContent, { content, onCopyError: () => {} }));
+
+    expect(container.querySelector("script")).toBeNull();
+    expect(container.querySelectorAll(".code-block")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Download genui" })).toBeNull();
+    expect(extractGeneratedCodeFiles(content)).toEqual([
+      { name: "generated.ts", content: "const answer = 42;\n" },
+    ]);
+  });
+
   it("adds a Run action for JavaScript and preview actions for HTML and CSS", () => {
     const javascript = renderToStaticMarkup(
       createElement(CodePreview, { code: 'console.log("Hello world");', language: "javascript" }),
@@ -77,6 +165,22 @@ describe("chat Markdown rendering", () => {
     expect(document).toContain("<h1>Hello</h1>");
     expect(document).toContain("script-src 'none'");
     expect(document).toContain("connect-src 'none'");
+  });
+
+  it("opens HTML and CSS previews from their code blocks", async () => {
+    render(createElement(MarkdownContent, {
+      content: "```javascript\nconsole.log('Hello');\n```\n\n```html\n<h1>Hello</h1>\n```\n\n```css\nh1 { color: red; }\n```",
+      onCopyError: () => {},
+    }));
+
+    await screen.getByRole("button", { name: "Run JavaScript code" }).click();
+    expect(screen.getByTitle("JavaScript output").getAttribute("srcdoc")).toContain("console.log('Hello');");
+
+    await screen.getByRole("button", { name: "Preview HTML code" }).click();
+    expect(screen.getByTitle("HTML preview").getAttribute("srcdoc")).toContain("<h1>Hello</h1>");
+
+    await screen.getByRole("button", { name: "Preview CSS code" }).click();
+    expect(screen.getByTitle("CSS preview").getAttribute("srcdoc")).toContain("h1 { color: red; }");
   });
 
   it("does not offer an action for languages without a local runtime", () => {

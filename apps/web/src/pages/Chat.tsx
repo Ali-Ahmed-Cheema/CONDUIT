@@ -40,6 +40,7 @@ import { MAX_CHAT_HISTORY_CHARACTERS } from "@conduit/core";
 import type { ChatAttachment } from "@conduit/core";
 import { ApiRequestError, getConnections, limitChatHistory, streamChat } from "../api";
 import { GitHubRepositoryPicker } from "../components/GitHubRepositoryPicker";
+import { GENUI_SYSTEM_PROMPT } from "../components/GenerativeUI";
 import { MarkdownContent } from "../components/MarkdownContent";
 import { Toast } from "@conduit/ui";
 import { convertFileToText } from "../lib/attachmentText";
@@ -472,7 +473,10 @@ export function ChatPage() {
     };
     const requestOptions = {
       ...generationOptions,
-      systemPrompt: buildMemorySystemPrompt(generationOptions.systemPrompt, useAppStore.getState().userMemories),
+      systemPrompt: buildMemorySystemPrompt(
+        [generationOptions.systemPrompt, GENUI_SYSTEM_PROMPT].filter(Boolean).join("\n\n"),
+        useAppStore.getState().userMemories,
+      ),
     };
     updateConversation(conversationId, (item) => ({
       ...item,
@@ -1260,7 +1264,17 @@ export function ChatPage() {
                           <button type="button" className="secondary-button" onClick={() => setEditingMessageId(null)}>Cancel edit</button>
                         </div>
                       ) : message.content ? (
-                        <MarkdownContent content={displayedContent} onCopyError={() => setError("Could not copy code to the clipboard.")} />
+                        <MarkdownContent
+                          content={displayedContent}
+                          onCopyError={() => setError("Could not copy code to the clipboard.")}
+                          onAction={(prompt) => {
+                            if (sending) {
+                              setDraft(prompt);
+                              return;
+                            }
+                            void handleSend(prompt);
+                          }}
+                        />
                       ) : sending && message.role === "assistant" ? "Thinking..." : ""}
                       {message.comparisonNotice && (
                         <p className="comparison-mode-notice" role="status">{message.comparisonNotice}</p>
@@ -1291,6 +1305,13 @@ export function ChatPage() {
                                   <MarkdownContent
                                     content={alternativeTranslation?.content ?? alternative.content}
                                     onCopyError={() => setError("Could not copy code to the clipboard.")}
+                                    onAction={(prompt) => {
+                                      if (sending) {
+                                        setDraft(prompt);
+                                        return;
+                                      }
+                                      void handleSend(prompt);
+                                    }}
                                   />
                                   <div className="message-actions">
                                     {renderTranslationControls(alternativeId, alternative.content)}
