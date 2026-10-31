@@ -13,6 +13,12 @@ import {
 } from "@conduit/core";
 import { getServerFeatureFlags } from "./featureFlags";
 import { createTypedApiMiddleware } from "./v4Api";
+import {
+  connectGitHubRepository,
+  getGitHubRepositoryFile,
+  getGitHubRepositoryTree,
+  GitHubRequestError,
+} from "./github";
 import type { ChatAlternative, ChatGenerationOptions, ChatMessage, ProviderId } from "../src/types";
 import {
   decryptApiKey,
@@ -396,6 +402,39 @@ async function sendConnections(response: express.Response) {
 }
 
 app.get("/api/health", (_request, response) => response.json({ ok: true }));
+app.post("/api/github/repository", rateLimit(20, 60_000), async (request, response, next) => {
+  try {
+    response.json(await connectGitHubRepository(request.body));
+  } catch (error) {
+    if (error instanceof GitHubRequestError) {
+      response.status(error.status).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+app.post("/api/github/tree", rateLimit(30, 60_000), async (request, response, next) => {
+  try {
+    response.json(await getGitHubRepositoryTree(request.body));
+  } catch (error) {
+    if (error instanceof GitHubRequestError) {
+      response.status(error.status).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+app.post("/api/github/file", rateLimit(60, 60_000), async (request, response, next) => {
+  try {
+    response.json(await getGitHubRepositoryFile(request.body));
+  } catch (error) {
+    if (error instanceof GitHubRequestError) {
+      response.status(error.status).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
 app.get("/api/connections", async (_request, response, next) => {
   try {
     await sendConnections(response);

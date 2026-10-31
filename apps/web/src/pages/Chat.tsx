@@ -25,6 +25,7 @@ import { Link } from "react-router-dom";
 import { MAX_CHAT_HISTORY_CHARACTERS } from "@conduit/core";
 import type { ChatAttachment } from "@conduit/core";
 import { ApiRequestError, getConnections, limitChatHistory, streamChat } from "../api";
+import { GitHubRepositoryPicker } from "../components/GitHubRepositoryPicker";
 import { Header } from "../components/Header";
 import { MarkdownContent } from "../components/MarkdownContent";
 import { EmptyState, Toast } from "@conduit/ui";
@@ -1281,6 +1282,10 @@ export function ChatPage() {
                 </div>
               )}
             </div>
+            <GitHubRepositoryPicker
+              disabled={!activeConnection || loadingConnections || sending || processingAttachments}
+              onAttach={(files) => setAttachments((current) => [...current, ...files])}
+            />
             {speechRecognition && !sending && (
               <button
                 type="button"

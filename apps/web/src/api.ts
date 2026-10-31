@@ -2,9 +2,13 @@ import {
   ChatStreamEventSchema,
   ConnectionsResponseSchema,
   ErrorResponseSchema,
+  GitHubRepositoryFileSchema,
+  GitHubRepositorySchema,
+  GitHubRepositoryTreeSchema,
   MAX_CHAT_HISTORY_CHARACTERS,
   ValidationResultSchema,
 } from "@conduit/core";
+import type { GitHubRepository } from "@conduit/core";
 import type {
   ChatAlternative,
   ChatComparisonRequest,
@@ -50,6 +54,46 @@ async function request<T>(path: string, schema: RuntimeSchema<T>, init?: Request
 }
 
 export const getConnections = () => request("/api/connections", ConnectionsResponseSchema);
+
+export const connectGitHubRepository = (url: string, token?: string, signal?: AbortSignal) =>
+  request("/api/github/repository", GitHubRepositorySchema, {
+    method: "POST",
+    body: JSON.stringify({ url, ...(token ? { token } : {}) }),
+    signal,
+  });
+
+export const getGitHubRepositoryTree = (
+  repository: GitHubRepository,
+  token?: string,
+  signal?: AbortSignal,
+) => request("/api/github/tree", GitHubRepositoryTreeSchema, {
+  method: "POST",
+  body: JSON.stringify({
+    owner: repository.owner,
+    repo: repository.name,
+    ref: repository.defaultBranch,
+    ...(token ? { token } : {}),
+  }),
+  signal,
+});
+
+export const getGitHubRepositoryFile = (
+  repository: GitHubRepository,
+  file: { path: string; sha: string },
+  token?: string,
+  signal?: AbortSignal,
+) => request("/api/github/file", GitHubRepositoryFileSchema, {
+  method: "POST",
+  body: JSON.stringify({
+    owner: repository.owner,
+    repo: repository.name,
+    ref: repository.defaultBranch,
+    path: file.path,
+    sha: file.sha,
+    ...(token ? { token } : {}),
+  }),
+  signal,
+});
 
 export const validateKey = (apiKey: string, probeUnknown: boolean) =>
   request("/api/validate", ValidationResultSchema, {

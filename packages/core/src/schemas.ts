@@ -118,6 +118,51 @@ export const ChatAttachmentSchema = z.object({
 });
 export type ChatAttachment = z.infer<typeof ChatAttachmentSchema>;
 
+const GitHubNameSchema = z.string().min(1).max(100).regex(/^[A-Za-z0-9_.-]+$/);
+const GitHubTokenSchema = z.string().trim().max(512).regex(/^[^\r\n]*$/).optional();
+
+export const GitHubRepositoryConnectRequestSchema = z.object({
+  url: z.string().trim().min(1).max(2_000),
+  token: GitHubTokenSchema,
+}).strict();
+
+export const GitHubRepositorySchema = z.object({
+  owner: GitHubNameSchema,
+  name: GitHubNameSchema,
+  fullName: z.string().min(3).max(201),
+  defaultBranch: z.string().min(1).max(255),
+}).strict();
+export type GitHubRepository = z.infer<typeof GitHubRepositorySchema>;
+
+export const GitHubRepositoryTreeRequestSchema = z.object({
+  owner: GitHubNameSchema,
+  repo: GitHubNameSchema,
+  ref: z.string().min(1).max(255),
+  token: GitHubTokenSchema,
+}).strict();
+
+export const GitHubRepositoryTreeSchema = z.object({
+  files: z.array(z.object({
+    path: z.string().min(1).max(1_024),
+    sha: z.string().regex(/^[a-f0-9]{40,64}$/i),
+    size: z.number().int().min(0),
+  }).strict()).max(2_500),
+  truncated: z.boolean(),
+}).strict();
+export type GitHubRepositoryTree = z.infer<typeof GitHubRepositoryTreeSchema>;
+
+export const GitHubRepositoryFileRequestSchema = GitHubRepositoryTreeRequestSchema.extend({
+  path: z.string().min(1).max(1_024),
+  sha: z.string().regex(/^[a-f0-9]{40,64}$/i),
+}).strict();
+
+export const GitHubRepositoryFileSchema = z.object({
+  path: z.string().min(1).max(1_024),
+  size: z.number().int().min(0).max(180_000),
+  content: z.string().max(180_000),
+}).strict();
+export type GitHubRepositoryFile = z.infer<typeof GitHubRepositoryFileSchema>;
+
 export const TokenUsageSchema = z.object({
   input: z.number().optional(),
   output: z.number().optional(),
