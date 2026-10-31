@@ -1,4 +1,7 @@
+// @vitest-environment jsdom
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { strToU8, zipSync } from "fflate";
 import { convertFileToText } from "../lib/attachmentText";
 
 const mocks = vi.hoisted(() => ({
@@ -28,6 +31,53 @@ describe("file-to-text conversion", () => {
     });
 
     await expect(convertFileToText(file)).resolves.toBe("No");
+  });
+
+  it("extracts Word text based on MIME type before sending it as text", async () => {
+    const bytes = zipSync({
+      "word/document.xml": strToU8(
+        '<?xml version="1.0"?><w:document xmlns:w="urn:word"><w:body><w:p><w:r><w:t>First paragraph</w:t></w:r></w:p><w:p><w:r><w:t>Second paragraph</w:t></w:r></w:p></w:body></w:document>',
+      ),
+    });
+    const file = new File([bytes], "notes.data", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
+    await expect(convertFileToText(file)).resolves.toBe(
+      "Extracted text (DOCX):\nFirst paragraph\nSecond paragraph",
+    );
+  });
+
+  it("extracts presentation slides in order", async () => {
+    const bytes = zipSync({
+      "ppt/slides/slide2.xml": strToU8(
+        '<p:sld xmlns:p="urn:presentation" xmlns:a="urn:drawing"><a:p><a:r><a:t>Second slide</a:t></a:r></a:p></p:sld>',
+      ),
+      "ppt/slides/slide1.xml": strToU8(
+        '<p:sld xmlns:p="urn:presentation" xmlns:a="urn:drawing"><a:p><a:r><a:t>First slide</a:t></a:r></a:p></p:sld>',
+      ),
+    });
+    const file = new File([bytes], "slides.pptx");
+
+    await expect(convertFileToText(file)).resolves.toBe(
+      "Extracted text (PPTX):\nFirst slide\n\nSecond slide",
+    );
+  });
+
+  it("extracts spreadsheet cell values, including shared strings", async () => {
+    const bytes = zipSync({
+      "xl/sharedStrings.xml": strToU8(
+        '<sst xmlns="urn:spreadsheet"><si><t>Name</t></si><si><t>CONDUIT</t></si></sst>',
+      ),
+      "xl/worksheets/sheet1.xml": strToU8(
+        '<worksheet xmlns="urn:spreadsheet"><sheetData><row><c t="s"><v>0</v></c><c><v>42</v></c></row><row><c t="s"><v>1</v></c></row></sheetData></worksheet>',
+      ),
+    });
+    const file = new File([bytes], "report.xlsx", {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+
+    await expect(convertFileToText(file)).resolves.toBe("Extracted text (XLSX):\nName\t42\nCONDUIT");
   });
 
   it("converts binary files of any extension to lossless base64 text", async () => {
