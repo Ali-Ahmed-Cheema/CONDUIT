@@ -55,6 +55,7 @@ const fake = vi.hoisted(() => {
 vi.mock("idb", () => ({ openDB: fake.openDB }));
 
 import {
+  clearVault,
   initializeVault,
   mergeVaultData,
   migrateVaultData,
@@ -226,6 +227,24 @@ describe("vault schema and persistence", () => {
 
   it("returns no device vault when no device data has been saved", async () => {
     expect(await readExistingDeviceVault()).toBeNull();
+  });
+
+  it("removes the generated device key when clearing the vault", async () => {
+    const workspace = await openDeviceVault();
+    const expected = {
+      version: 1,
+      keys: [],
+      chats: [conversation("device", "Device chat")],
+      settings: { theme: "dark" },
+    };
+    await writeDeviceVault(workspace.key, expected);
+
+    await clearVault();
+
+    expect(fake.records.has("device-key")).toBe(false);
+    expect(fake.records.has("device-data")).toBe(false);
+    expect(fake.records.has("data")).toBe(false);
+    expect(fake.records.has("setup")).toBe(false);
   });
 
   it("does not treat device data without its encryption key as an empty vault", async () => {

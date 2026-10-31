@@ -289,6 +289,7 @@ export const clearVault = async () => {
       transaction.store.delete("data"),
       transaction.store.delete("setup"),
       transaction.store.delete("device-data"),
+      transaction.store.delete("device-key"),
       transaction.store.delete("lockout"),
       transaction.done,
     ]);
