@@ -1,7 +1,12 @@
 import { Children, isValidElement, useEffect, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Download } from "lucide-react";
+import {
+  createGeneratedFilesZip,
+  downloadGeneratedFile,
+  extractGeneratedCodeFiles,
+} from "../lib/generatedFiles";
 
 function getTextContent(children: ReactNode): string {
   return Children.toArray(children)
@@ -83,12 +88,31 @@ function TableWithCopy({ children, onCopyError }: { children: ReactNode; onCopyE
   );
 }
 
-export function MarkdownContent({ content, onCopyError }: { content: string; onCopyError: () => void }) {
+export function MarkdownContent({
+  content,
+  onCopyError,
+}: {
+  content: string;
+  onCopyError: () => void;
+}) {
+  const [downloadFailed, setDownloadFailed] = useState(false);
+  const generatedFiles = extractGeneratedCodeFiles(content);
+  const hasProjectFiles = generatedFiles.length > 1 || generatedFiles.some((file) => file.name.includes("/"));
+  let renderedCodeBlockIndex = 0;
+  const downloadFile = (file: Blob, name: string) => {
+    try {
+      downloadGeneratedFile(file, name);
+    } catch {
+      setDownloadFailed(true);
+    }
+  };
   const components: Components = {
     table({ children }) {
       return <TableWithCopy onCopyError={onCopyError}>{children}</TableWithCopy>;
     },
     pre({ children }) {
+      const fileIndex = renderedCodeBlockIndex;
+      renderedCodeBlockIndex += 1;
       const codeElement = Children.toArray(children).find((child) =>
         isValidElement<{ className?: string; children?: ReactNode }>(child),
       );
@@ -97,12 +121,50 @@ export function MarkdownContent({ content, onCopyError }: { content: string; onC
         : null;
       const code = getTextContent(codeProps?.children ?? children);
       const language = codeProps?.className?.match(/language-([^\s]+)/)?.[1];
+      const generatedFile = generatedFiles[fileIndex];
 
       return (
         <div className="code-block">
           <div className="code-toolbar">
             <span>{language ?? "Code"}</span>
-            <CopyCodeButton code={code} onCopyError={onCopyError} />
+            <div style={{ display: "flex", gap: 6 }}>
+              <CopyCodeButton code={code} onCopyError={onCopyError} />
+              {generatedFile && (
+                <button
+                  type="button"
+                  className="code-copy-button"
+                  aria-label={`Download ${generatedFile.name}`}
+                  title={`Download ${generatedFile.name}`}
+                  onClick={() => downloadFile(new Blob([generatedFile.content], { type: "text/plain;charset=utf-8" }), generatedFile.name)}
+                >
+                  <Download size={14} />
+                </button>
+              )}
+              {fileIndex === 0 && hasProjectFiles && (
+                <button
+                  type="button"
+                  className="code-copy-button"
+                  aria-label="Download project as ZIP"
+                  title="Download project as ZIP"
+                  onClick={() => {
+                    try {
+                      const zip = createGeneratedFilesZip(generatedFiles);
+                      const archive = new ArrayBuffer(zip.byteLength);
+                      new Uint8Array(archive).set(zip);
+                      downloadGeneratedFile(
+                        new Blob([archive], { type: "application/zip" }),
+                        "generated-project.zip",
+                      );
+                    } catch {
+                      setDownloadFailed(true);
+                    }
+                  }}
+                >
+                  <Download size={14} />
+                  <span className="visually-hidden">ZIP</span>
+                </button>
+              )}
+            </div>
           </div>
           <pre><code className={codeProps?.className}>{codeProps?.children ?? children}</code></pre>
         </div>
@@ -123,6 +185,7 @@ export function MarkdownContent({ content, onCopyError }: { content: string; onC
 
   return (
     <div className="markdown">
+      {downloadFailed && <p role="alert">Could not download the generated file.</p>}
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {content}
       </ReactMarkdown>

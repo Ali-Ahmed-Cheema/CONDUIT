@@ -36,7 +36,11 @@ The workspace opens without a password. On first launch, the app creates a non-e
 
 Encrypted backups use a separate password that you choose when exporting and enter when importing. Keep a backup if you need to move the workspace to another browser or device.
 
+For an individual conversation, open **More options** in the chat to export it as Markdown or JSON. Use **Import chat** there to restore a JSON export; the imported conversation becomes active with its messages and generation settings, ready to continue. API credentials are not included in chat exports.
+
 Open **API Config** and add a real supported provider key. CONDUIT validates it with the provider and stores it encrypted in the local API service. Select the connection and a chat model, return to the chat, and send a message. Provider usage may incur charges.
+
+The chat composer accepts multiple files and folders. Text files are included as text, images are converted to English OCR text in the browser, and other binary formats are encoded as base64 text so their contents can still be sent to text-only chat APIs. Image data stays in the browser; the English OCR model is downloaded from jsDelivr on first use. The combined message is limited to 180,000 characters, and oversized attachments are reported instead of being silently truncated.
 
 API Config has one input for supported AI chat credentials and identifies known
 key formats as you type; the provider is confirmed by validation before the key
