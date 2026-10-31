@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Check, RefreshCw, Trash2, X } from "lucide-react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
+import { Check, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import {
   ApiRequestError,
   addConnection,
@@ -14,6 +14,7 @@ import { Header } from "../components/Header";
 import { GlassCard } from "@conduit/ui";
 import type { ConnectionsResponse, ProviderId } from "../types";
 import { useAppStore } from "../store";
+import { parseApiKeyCsv } from "../lib/apiKeyCsv";
 
 const detectProvider = (key: string): ProviderId | undefined => {
   if (key.startsWith("AIza")) return "google";
@@ -49,6 +50,10 @@ export function ApiConfigPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [bulkKeys, setBulkKeys] = useState<string[]>([]);
+  const [bulkFileName, setBulkFileName] = useState("");
+  const [bulkDuplicateCount, setBulkDuplicateCount] = useState(0);
+  const [bulkAllowUnknownProbe, setBulkAllowUnknownProbe] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,6 +118,122 @@ export function ApiConfigPage() {
       setReplacingId(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The API key could not be validated.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const selectCsvFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+
+    setError("");
+    setStatusMessage("");
+    setBulkKeys([]);
+    setBulkFileName("");
+    setBulkDuplicateCount(0);
+    setBulkAllowUnknownProbe(false);
+    if (file.size > 1_000_000) {
+      setError("Choose a CSV file smaller than 1 MB.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const parsed = parseApiKeyCsv(await file.text());
+      setBulkKeys(parsed.keys);
+      setBulkFileName(file.name);
+      setBulkDuplicateCount(parsed.duplicateCount);
+      setStatusMessage(
+        `Found ${parsed.keys.length} unique API key${parsed.keys.length === 1 ? "" : "s"}${parsed.duplicateCount ? `; ${parsed.duplicateCount} duplicate${parsed.duplicateCount === 1 ? "" : "s"} will be skipped` : ""}.`,
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not read the CSV file.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const importCsvKeys = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError("");
+    setStatusMessage("");
+
+    const validKeys = bulkKeys.filter((key) => key.length >= 8 && key.length <= 4096);
+    const invalidLengthCount = bulkKeys.length - validKeys.length;
+    const availableSlots = Math.max(0, 10 - useAppStore.getState().connections.length);
+    if (availableSlots === 0) {
+      setError("You can save up to 10 API connections. Delete a connection before importing more.");
+      return;
+    }
+
+    const keysToImport = validKeys.slice(0, availableSlots);
+    const skippedForLimit = validKeys.length - keysToImport.length;
+    if (keysToImport.some((key) => !detectProvider(key)) && !bulkAllowUnknownProbe) {
+      setError("Allow a service check before importing keys with an unrecognized format.");
+      return;
+    }
+    if (keysToImport.length === 0) {
+      setError("No API keys with a supported length are available to import.");
+      return;
+    }
+
+    setBusy(true);
+    let savedCount = 0;
+    let failedCount = invalidLengthCount;
+    let attemptedCount = 0;
+    let stopReason: "rate-limit" | "provider-error" | null = null;
+    try {
+      for (const key of keysToImport) {
+        try {
+          const validation = await validateKey(key, !detectProvider(key) && bulkAllowUnknownProbe);
+          let result: ConnectionsResponse;
+          try {
+            result = await addConnection(validation.validationId);
+          } catch (reason) {
+            if (!(reason instanceof ApiRequestError) || reason.code !== "VALIDATION_EXPIRED") throw reason;
+            const retryValidation = await validateKey(key, !detectProvider(key) && bulkAllowUnknownProbe);
+            result = await addConnection(retryValidation.validationId);
+          }
+
+          setConnections(result.connections);
+          setActiveConnectionId(result.activeId);
+          const active = result.connections.find((connection) => connection.id === result.activeId);
+          setActiveModel(active?.models[0] ?? "");
+          savedCount += 1;
+        } catch (reason) {
+          failedCount += 1;
+          if (reason instanceof ApiRequestError && reason.status === 429) {
+            stopReason = "rate-limit";
+          } else if (!(reason instanceof ApiRequestError) || (reason.status ?? 0) >= 500) {
+            stopReason = "provider-error";
+          }
+        }
+
+        attemptedCount += 1;
+        setStatusMessage(`Checking CSV keys: ${attemptedCount}/${keysToImport.length} checked · ${savedCount} added · ${failedCount} not added.`);
+        if (stopReason) break;
+      }
+
+      const notCheckedCount = keysToImport.length - attemptedCount;
+      const summary = [
+        `${savedCount} added`,
+        `${failedCount} not added`,
+        `${bulkDuplicateCount} duplicate${bulkDuplicateCount === 1 ? "" : "s"} skipped`,
+        `${skippedForLimit} skipped because the 10-connection limit was reached`,
+        `${notCheckedCount} not checked`,
+      ];
+      setStatusMessage(
+        `CSV import complete: ${summary.join("; ")}${stopReason === "rate-limit"
+          ? ". Provider rate limit reached; wait before trying the remaining keys."
+          : stopReason === "provider-error"
+            ? ". A provider or network error stopped the import; try the remaining keys later."
+            : "."}`,
+      );
+      setBulkKeys([]);
+      setBulkFileName("");
+      setBulkAllowUnknownProbe(false);
     } finally {
       setBusy(false);
     }
@@ -254,6 +375,39 @@ export function ApiConfigPage() {
             I consent to sending this key to supported AI providers to identify it.
           </label>
         )}
+        <section className="key-card glass" aria-labelledby="csv-import-heading">
+          <h2 id="csv-import-heading">Import API keys from CSV</h2>
+          <p className="page-description">
+            Export your Excel sheet as a CSV with one API key per row, or include an “API key” column. Keys are checked one at a time; no chat messages are sent.
+          </p>
+          <label>
+            Choose a CSV file
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              aria-label="Import API keys from CSV"
+              onChange={(event) => void selectCsvFile(event)}
+              disabled={busy || loading}
+            />
+          </label>
+          {bulkFileName && (
+            <form onSubmit={(event) => void importCsvKeys(event)}>
+              <p>{bulkFileName}: {bulkKeys.length} unique key{bulkKeys.length === 1 ? "" : "s"} ready to check.</p>
+              <label className="consent-row">
+                <input
+                  type="checkbox"
+                  checked={bulkAllowUnknownProbe}
+                  onChange={(event) => setBulkAllowUnknownProbe(event.target.checked)}
+                  disabled={busy}
+                />
+                I consent to checking keys with unrecognized formats against supported AI providers. No chat messages will be sent.
+              </label>
+              <button type="submit" className="primary-button" disabled={busy || loading || connections.length >= 10}>
+                <Upload size={16} /> {busy ? "Checking keys..." : "Check and add keys"}
+              </button>
+            </form>
+          )}
+        </section>
         <p className="counter">({connections.length}/10 saved)</p>
         {error && <p className="error-alert" role="alert">{error}</p>}
         {statusMessage && <p className="success-alert" role="status">{statusMessage}</p>}

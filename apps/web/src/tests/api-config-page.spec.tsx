@@ -30,6 +30,7 @@ vi.mock("../api", async (importOriginal) => {
 });
 
 import { ApiConfigPage } from "../pages/ApiConfig";
+import { ApiRequestError } from "../api";
 import { useAppStore } from "../store";
 import type { Connection, ConnectionsResponse } from "../types";
 
@@ -130,6 +131,79 @@ describe("API config page", () => {
     await user.click(screen.getByRole("checkbox", { name: /consent to sending this key/i }));
     await user.click(screen.getByRole("button", { name: "Check and save" }));
     expect(mocks.validateKey).toHaveBeenCalledWith("custom-provider-key", true);
+  });
+
+  it("checks and adds CSV keys sequentially", async () => {
+    const user = userEvent.setup();
+    const steps: string[] = [];
+    mocks.validateKey.mockImplementation(async (key: string) => {
+      steps.push(`check:${key}`);
+      return {
+        validationId: `validation-${key}`,
+        provider: "openai",
+        providerName: "OpenAI",
+        models: ["gpt-test"],
+        chatModels: ["gpt-test"],
+      };
+    });
+    mocks.addConnection.mockImplementation(async (validationId: string) => {
+      steps.push(`save:${validationId}`);
+      return response([first], first.id);
+    });
+    const file = new File(["API key\nsk-first-key\nsk-second-key"], "keys.csv", { type: "text/csv" });
+    Object.defineProperty(file, "text", { value: vi.fn().mockResolvedValue("API key\nsk-first-key\nsk-second-key") });
+    renderConfig();
+
+    fireEvent.change(screen.getByLabelText("Choose a CSV file"), { target: { files: [file] } });
+    await screen.findByText("keys.csv: 2 unique keys ready to check.");
+    await user.click(screen.getByRole("button", { name: "Check and add keys" }));
+
+    expect(steps).toEqual([
+      "check:sk-first-key",
+      "save:validation-sk-first-key",
+      "check:sk-second-key",
+      "save:validation-sk-second-key",
+    ]);
+    expect((await screen.findByRole("status")).textContent).toContain(
+      "CSV import complete: 2 added; 0 not added; 0 duplicates skipped; 0 skipped because the 10-connection limit was reached; 0 not checked.",
+    );
+    expect(useAppStore.getState().activeConnectionId).toBe(first.id);
+  });
+
+  it("requires consent before checking unknown CSV keys", async () => {
+    const user = userEvent.setup();
+    const file = new File(["key\ncustom-provider-key"], "unknown.csv", { type: "text/csv" });
+    Object.defineProperty(file, "text", { value: vi.fn().mockResolvedValue("key\ncustom-provider-key") });
+    renderConfig();
+
+    fireEvent.change(screen.getByLabelText("Choose a CSV file"), { target: { files: [file] } });
+    await screen.findByText("unknown.csv: 1 unique key ready to check.");
+    await user.click(screen.getByRole("button", { name: "Check and add keys" }));
+    expect(mocks.validateKey).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("unrecognized format");
+
+    await user.click(screen.getByRole("checkbox", { name: /checking keys with unrecognized formats/i }));
+    await user.click(screen.getByRole("button", { name: "Check and add keys" }));
+    expect(mocks.validateKey).toHaveBeenCalledWith("custom-provider-key", true);
+  });
+
+  it("stops a CSV import when the provider rate limit is reached", async () => {
+    const user = userEvent.setup();
+    mocks.validateKey.mockRejectedValue(new ApiRequestError("Rate limited.", undefined, 429));
+    const csv = "key\nsk-first-key\nsk-second-key";
+    const file = new File([csv], "limited.csv", { type: "text/csv" });
+    Object.defineProperty(file, "text", { value: vi.fn().mockResolvedValue(csv) });
+    renderConfig();
+
+    fireEvent.change(screen.getByLabelText("Choose a CSV file"), { target: { files: [file] } });
+    await screen.findByText("limited.csv: 2 unique keys ready to check.");
+    await user.click(screen.getByRole("button", { name: "Check and add keys" }));
+
+    expect(mocks.validateKey).toHaveBeenCalledTimes(1);
+    expect(mocks.addConnection).not.toHaveBeenCalled();
+    expect((await screen.findByRole("status")).textContent).toContain(
+      "CSV import complete: 0 added; 1 not added; 0 duplicates skipped; 0 skipped because the 10-connection limit was reached; 1 not checked. Provider rate limit reached",
+    );
   });
 
   it("replaces a selected connection only after validating the replacement key", async () => {

@@ -38,7 +38,7 @@ Encrypted backups use a separate password that you choose when exporting and ent
 
 For an individual conversation, open **More options** in the chat to export it as Markdown or JSON. To restore a JSON export, open **History** and choose **Import chat**; the imported conversation opens with its messages and generation settings, ready to continue. API credentials are not included in chat exports.
 
-Open **API Config** and add a real supported provider key. CONDUIT validates it with the provider and stores it encrypted in the local API service. Select the connection and a chat model, return to the chat, and send a message. Provider usage may incur charges.
+Open **API Config** and add a real supported provider key. CONDUIT validates it with the provider and stores it encrypted in the local API service. Select the connection and a chat model, return to the chat, and send a message. Provider usage may incur charges. To add multiple keys, export an Excel sheet as CSV with one key per row or an **API key** column; CONDUIT checks keys sequentially and saves only valid keys (up to 10 connections). Validation checks provider model access and does not send chat messages.
 
 The chat composer accepts multiple files and folders. Text files are included as text, images are converted to English OCR text in the browser, and other binary formats are encoded as base64 text so their contents can still be sent to text-only chat APIs. Image data stays in the browser; the English OCR model is downloaded from jsDelivr on first use. The combined message is limited to 180,000 characters, and oversized attachments are reported instead of being silently truncated.
 
