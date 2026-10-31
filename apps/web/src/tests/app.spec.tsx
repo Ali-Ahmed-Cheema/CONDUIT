@@ -99,4 +99,31 @@ describe("application startup", () => {
     expect(screen.queryByText("Your private space")).toBeNull();
     expect(screen.queryByRole("button", { name: "Unlock" })).toBeNull();
   });
+
+  it("loads saved user memory and persists it with the encrypted vault", async () => {
+    mocks.openDeviceVault.mockResolvedValueOnce({
+      key: dataKey,
+      data: {
+        version: 1,
+        keys: [],
+        chats: [],
+        settings: { userMemories: ["The user's name is Ali."] },
+      },
+      legacyVaultFound: false,
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(useAppStore.getState().userMemories).toEqual(["The user's name is Ali."]);
+      expect(mocks.writeDeviceVault).toHaveBeenLastCalledWith(
+        dataKey,
+        expect.objectContaining({
+          settings: expect.objectContaining({
+            userMemories: ["The user's name is Ali."],
+          }),
+        }),
+      );
+    });
+  });
 });

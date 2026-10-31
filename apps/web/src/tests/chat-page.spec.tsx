@@ -82,6 +82,7 @@ function setupStore(conversations: ChatConversation[] = []) {
     activeModel: "gpt-test",
     conversations,
     activeConversationId: conversations[0]?.id ?? null,
+    userMemories: [],
     soundOn: false,
     vaultError: null,
   });
@@ -118,6 +119,19 @@ afterEach(() => {
 });
 
 describe("chat page", () => {
+  it("keeps history and settings in the sidebar and opens chat options from there", async () => {
+    const user = userEvent.setup();
+    renderChat();
+    await screen.findByText(/OpenAI · gpt-test/);
+
+    const sidebarNav = screen.getByRole("navigation", { name: "Workspace navigation" });
+    expect(within(sidebarNav).getByRole("link", { name: "Chat history" })).toBeTruthy();
+    expect(within(sidebarNav).getByRole("link", { name: "Settings" })).toBeTruthy();
+    await user.click(within(sidebarNav).getByRole("button", { name: "More options" }));
+
+    expect(document.querySelector<HTMLDetailsElement>(".generation-options")?.open).toBe(true);
+  });
+
   it("does not show placeholder plan, profile, or cowork UI", async () => {
     renderChat();
     await screen.findByText(/OpenAI · gpt-test/);
@@ -176,6 +190,27 @@ describe("chat page", () => {
       usage: { input: 4, output: 2 },
     });
     expect(screen.getByText("Response complete")).toBeTruthy();
+  });
+
+  it("uses compact memories in new chats without resending the earlier conversation", async () => {
+    const user = userEvent.setup();
+    renderChat();
+    await screen.findByText(/OpenAI · gpt-test/);
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "My name is Ali");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByText("Mocked response")).toBeTruthy();
+    expect(useAppStore.getState().userMemories).toEqual(["The user's name is Ali."]);
+
+    await user.click(screen.getByRole("button", { name: /New chat/ }));
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "What is my name?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(mocks.streamChat).toHaveBeenCalledTimes(2);
+    expect(mocks.streamChat.mock.calls[1]?.[2]).toEqual([{ role: "user", content: "What is my name?" }]);
+    expect(mocks.streamChat.mock.calls[1]?.[6]).toMatchObject({
+      systemPrompt: expect.stringContaining("The user's name is Ali."),
+    });
   });
 
   it("translates a response into a selected language and can restore the original", async () => {

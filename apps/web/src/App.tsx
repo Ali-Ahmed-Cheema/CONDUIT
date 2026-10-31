@@ -3,6 +3,7 @@ import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { readUiPreferences, useAppStore } from "./store";
 import { openDeviceVault, writeDeviceVault } from "@conduit/storage";
 import { CommandPalette } from "./components/CommandPalette";
+import { normalizeUserMemories } from "./lib/userMemory";
 
 const ChatPage = lazy(() => import("./pages/Chat").then((module) => ({ default: module.ChatPage })));
 const HistoryPage = lazy(() => import("./pages/History").then((module) => ({ default: module.HistoryPage })));
@@ -23,6 +24,7 @@ async function persistVault(setVaultError: (message: string | null) => void) {
         soundOn: state.soundOn,
         autoLockMinutes: state.autoLockMinutes,
         preferences: state.preferences,
+        userMemories: state.userMemories,
       },
     });
     setVaultError(null);
@@ -39,6 +41,7 @@ function AppShell() {
   const autoLockMinutes = useAppStore((state) => state.autoLockMinutes);
   const preferences = useAppStore((state) => state.preferences);
   const conversations = useAppStore((state) => state.conversations);
+  const userMemories = useAppStore((state) => state.userMemories);
   const dataKey = useAppStore((state) => state.dataKey);
   const vaultError = useAppStore((state) => state.vaultError);
   const setDataKey = useAppStore((state) => state.setDataKey);
@@ -56,6 +59,7 @@ function AppShell() {
 
         setDataKey(key);
         setConversations(data.chats);
+        useAppStore.getState().setUserMemories(normalizeUserMemories(data.settings.userMemories));
         if (data.settings.theme === "light" || data.settings.theme === "dark" || data.settings.theme === "system") {
           setTheme(data.settings.theme);
         }
@@ -133,7 +137,7 @@ function AppShell() {
       document.removeEventListener("visibilitychange", flushWhenHidden);
       window.removeEventListener("pagehide", flushOnPageHide);
     };
-  }, [unlocked, dataKey, conversations, theme, soundOn, autoLockMinutes, preferences, setVaultError]);
+  }, [unlocked, dataKey, conversations, userMemories, theme, soundOn, autoLockMinutes, preferences, setVaultError]);
 
   if (!unlocked) {
     return (

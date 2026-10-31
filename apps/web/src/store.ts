@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { ChatConversation as ChatConversationContract, WorkspaceChatMessage } from "@conduit/core";
 import type { Connection, ProviderId } from "./types";
+import { mergeUserMemories, normalizeUserMemories } from "./lib/userMemory";
 
 export type ThemeMode = "light" | "dark" | "system";
 export type TextSize = "normal" | "large" | "extra-large";
@@ -65,6 +66,7 @@ interface AppState {
   activeConnectionId: string | null;
   conversations: ChatConversation[];
   activeConversationId: string | null;
+  userMemories: string[];
   activeKeyId: string | null;
   activeModel: string;
   lastInteraction: number;
@@ -83,6 +85,8 @@ interface AppState {
   setActiveModel: (value: string) => void;
   setConversations: (conversations: ChatConversation[]) => void;
   setActiveConversationId: (id: string | null) => void;
+  setUserMemories: (memories: string[]) => void;
+  rememberUserFacts: (memories: string[]) => void;
   addConversation: (conversation: ChatConversation) => void;
   updateConversation: (id: string, updater: (conversation: ChatConversation) => ChatConversation) => void;
   appendMessage: (conversationId: string, message: ChatMessage) => void;
@@ -101,6 +105,7 @@ export const useAppStore = create<AppState>((set) => ({
   activeConnectionId: null,
   conversations: [],
   activeConversationId: null,
+  userMemories: [],
   activeKeyId: null,
   activeModel: "",
   lastInteraction: Date.now(),
@@ -121,6 +126,10 @@ export const useAppStore = create<AppState>((set) => ({
   setActiveModel: (value) => set({ activeModel: value }),
   setConversations: (conversations) => set({ conversations }),
   setActiveConversationId: (id) => set({ activeConversationId: id }),
+  setUserMemories: (memories) => set({ userMemories: normalizeUserMemories(memories) }),
+  rememberUserFacts: (memories) => set((state) => ({
+    userMemories: mergeUserMemories(state.userMemories, memories),
+  })),
   addConversation: (conversation) =>
     set((state) => ({
       conversations: [conversation, ...state.conversations.filter((item) => item.id !== conversation.id)],

@@ -42,6 +42,8 @@ Open **API Config** and add a real supported provider key. CONDUIT validates it 
 
 The chat composer accepts multiple files and folders. Attachments are converted to text in the browser before they are sent to the chat API: text files are included as-is, Word/PowerPoint/Excel and OpenDocument files have their text extracted, images are converted to English OCR text, and other binary formats are encoded as base64 text as a fallback (the model may not interpret arbitrary binary data). Image data stays in the browser; the English OCR model is downloaded from jsDelivr on first use. The combined message is limited to 180,000 characters, and oversized attachments are reported instead of being silently truncated.
 
+CONDUIT can carry a compact memory across conversations. It recognizes explicit details such as “My name is Ali,” “I prefer concise answers,” and “Remember that …”; memories are saved in the encrypted local vault and included as brief context in later chat requests, without replaying old conversations or making extra model calls. This adds a small amount of context to requests sent to the selected provider. Review or forget memories in **Settings → Cross-chat memory**.
+
 API Config has one input for supported AI chat credentials and identifies known
 key formats as you type; the provider is confirmed by validation before the key
 is saved. Unknown formats require consent before CONDUIT checks supported chat

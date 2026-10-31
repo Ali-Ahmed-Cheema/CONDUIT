@@ -111,6 +111,17 @@ describe("vault schema and persistence", () => {
     });
   });
 
+  it("merges user memories while keeping the local name when backups conflict", () => {
+    expect(mergeVaultData(
+      { chats: [], settings: { userMemories: ["The user's name is Ali.", "The user prefers concise answers."] } },
+      { chats: [], settings: { userMemories: ["The user's name is Sam.", "The user likes examples."] } },
+    ).settings.userMemories).toEqual([
+      "The user likes examples.",
+      "The user's name is Ali.",
+      "The user prefers concise answers.",
+    ]);
+  });
+
   it("rejects malformed or unsupported vault schemas", () => {
     expect(() => migrateVaultData({ version: 99 })).toThrow("unsupported schema version");
     expect(() => migrateVaultData({ chats: "not-an-array" })).toThrow("invalid format");

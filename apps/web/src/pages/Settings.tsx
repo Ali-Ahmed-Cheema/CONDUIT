@@ -13,6 +13,7 @@ import {
   readVaultBackup,
 } from "../crypto/vaultBackup";
 import { defaultUiPreferences, readUiPreferences, useAppStore, type ChatConversation } from "../store";
+import { normalizeUserMemories } from "../lib/userMemory";
 
 export function SettingsPage() {
   const theme = useAppStore((state) => state.theme);
@@ -21,6 +22,8 @@ export function SettingsPage() {
   const setSoundOn = useAppStore((state) => state.setSoundOn);
   const setAutoLockMinutes = useAppStore((state) => state.setAutoLockMinutes);
   const preferences = useAppStore((state) => state.preferences);
+  const userMemories = useAppStore((state) => state.userMemories);
+  const setUserMemories = useAppStore((state) => state.setUserMemories);
   const setPreferences = useAppStore((state) => state.setPreferences);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -46,6 +49,7 @@ export function SettingsPage() {
         activeConnectionId: null,
         conversations: [],
         activeConversationId: null,
+        userMemories: [],
         activeKeyId: null,
         activeModel: "",
         vaultError: null,
@@ -107,6 +111,7 @@ export function SettingsPage() {
       const next = importMode === "merge" ? mergeVaultData(current, imported) : imported;
       await writeDeviceVault(dataKey, next);
       useAppStore.getState().setConversations(next.chats as ChatConversation[]);
+      setUserMemories(normalizeUserMemories(next.settings.userMemories));
       const firstConversation = next.chats[0] as ChatConversation | undefined;
       useAppStore.getState().setActiveConversationId(
         firstConversation && typeof firstConversation.id === "string" ? firstConversation.id : null,
@@ -170,6 +175,38 @@ export function SettingsPage() {
             onChange={(reduceTransparency) => setPreferences({ reduceTransparency })}
           />
           <GlassToggle label="High contrast" checked={preferences.highContrast} onChange={(highContrast) => setPreferences({ highContrast })} />
+        </GlassPanel>
+
+        <GlassPanel className="settings-block">
+          <h2>Cross-chat memory</h2>
+          <p>CONDUIT saves a small set of explicit facts from your messages in the encrypted local vault and uses them in new chats. Memory adds a small amount of context to each request; it does not make extra AI calls.</p>
+          {userMemories.length === 0 ? (
+            <p>No memories saved yet. Try saying “My name is Ali” or “Remember that I prefer concise answers.”</p>
+          ) : (
+            <ul>
+              {userMemories.map((memory) => (
+                <li key={memory}>
+                  {memory}{" "}
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    aria-label={`Forget memory: ${memory}`}
+                    onClick={() => setUserMemories(userMemories.filter((item) => item !== memory))}
+                  >
+                    Forget
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setUserMemories([])}
+            disabled={userMemories.length === 0}
+          >
+            Forget all memories
+          </button>
         </GlassPanel>
 
         <GlassPanel className="settings-block">

@@ -213,7 +213,7 @@ export const ApiChatMessageSchema = ChatMessageSchema.extend({
 });
 
 export const ChatGenerationOptionsSchema = z.object({
-  systemPrompt: z.string().max(12_000).optional(),
+  systemPrompt: z.string().max(14_000).optional(),
   temperature: z.number().finite().min(0).max(2).optional(),
   maxTokens: z.number().int().min(1).max(200_000).optional(),
 });

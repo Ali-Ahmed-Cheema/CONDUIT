@@ -59,11 +59,11 @@ describe("encrypted vault backups", () => {
     const merged = mergeVaultData(
       {
         chats: [conversation("shared", "old"), conversation("local", "local")],
-        settings: { theme: "light", soundOn: true },
+        settings: { theme: "light", soundOn: true, userMemories: ["The user's name is Ali."] },
       },
       {
         chats: [conversation("shared", "new"), conversation("imported", "imported")],
-        settings: { theme: "dark" },
+        settings: { theme: "dark", userMemories: ["The user prefers concise answers."] },
       },
     );
 
@@ -72,6 +72,10 @@ describe("encrypted vault backups", () => {
       conversation("imported", "imported"),
       conversation("local", "local"),
     ]);
-    expect(merged.settings).toEqual({ theme: "dark", soundOn: true });
+    expect(merged.settings).toEqual({
+      theme: "dark",
+      soundOn: true,
+      userMemories: ["The user prefers concise answers.", "The user's name is Ali."],
+    });
   });
 });

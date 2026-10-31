@@ -15,6 +15,7 @@ import {
   Plus,
   Search,
   Settings,
+  SlidersHorizontal,
   Sparkles,
   Download,
   Folder,
@@ -43,6 +44,7 @@ import { MarkdownContent } from "../components/MarkdownContent";
 import { Toast } from "@conduit/ui";
 import { convertFileToText } from "../lib/attachmentText";
 import { estimateTokens, makeTokenSummary } from "../lib/tokens";
+import { buildMemorySystemPrompt, extractUserMemories } from "../lib/userMemory";
 import { fullDateTime, msgTime } from "../lib/time";
 import { useAppStore } from "../store";
 import type { ChatAlternative, ChatComparisonRequest } from "../types";
@@ -171,6 +173,7 @@ export function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 720);
   const [sidebarSearch, setSidebarSearch] = useState("");
   const messagesPanel = useRef<HTMLElement>(null);
+  const generationOptions = useRef<HTMLDetailsElement>(null);
   const shouldAutoScroll = useRef(true);
   const previousConversationId = useRef(activeConversationId);
   const requestController = useRef<AbortController | null>(null);
@@ -404,6 +407,7 @@ export function ChatPage() {
       return;
     }
 
+    useAppStore.getState().rememberUserFacts(extractUserMemories(userContent));
     const now = Date.now();
     const conversation = currentConversation ?? {
         id: globalThis.crypto.randomUUID(),
@@ -466,6 +470,10 @@ export function ChatPage() {
       ...(temperature === "" ? {} : { temperature: Number(temperature) }),
       ...(maxTokens === "" ? {} : { maxTokens: Number(maxTokens) }),
     };
+    const requestOptions = {
+      ...generationOptions,
+      systemPrompt: buildMemorySystemPrompt(generationOptions.systemPrompt, useAppStore.getState().userMemories),
+    };
     updateConversation(conversationId, (item) => ({
       ...item,
       title: item.title === "New conversation"
@@ -515,7 +523,7 @@ export function ChatPage() {
           }));
         },
         controller.signal,
-        generationOptions,
+        requestOptions,
         (usage) => {
           updateConversation(conversationId, (item) => ({
             ...item,
@@ -872,7 +880,7 @@ export function ChatPage() {
             <Sparkles size={18} aria-hidden="true" /><span>Connect AI</span>
           </Link>
           <Link to="/history" className="chat-sidebar-link">
-            <Clock3 size={18} aria-hidden="true" /><span>History</span>
+            <Clock3 size={18} aria-hidden="true" /><span>Chat history</span>
           </Link>
           <Link to="/getting-started" className="chat-sidebar-link">
             <BookOpen size={18} aria-hidden="true" /><span>Getting started</span>
@@ -880,6 +888,18 @@ export function ChatPage() {
           <Link to="/settings" className="chat-sidebar-link">
             <Settings size={18} aria-hidden="true" /><span>Settings</span>
           </Link>
+          <button
+            type="button"
+            className="chat-sidebar-link"
+            onClick={() => {
+              const options = generationOptions.current;
+              if (!options) return;
+              options.open = true;
+              options.querySelector("summary")?.focus();
+            }}
+          >
+            <SlidersHorizontal size={18} aria-hidden="true" /><span>More options</span>
+          </button>
         </nav>
 
         <div className="chat-sidebar-conversations">
@@ -944,20 +964,12 @@ export function ChatPage() {
             {sidebarOpen ? <PanelLeftClose size={19} /> : <PanelLeftOpen size={19} />}
           </button>
           <span className="chat-topbar-label">{currentConversation?.title || "Chat"}</span>
-          <nav className="chat-topbar-actions" aria-label="Chat actions">
-            <Link to="/history" className="chat-topbar-link" aria-label="History" title="History">
-              <Clock3 size={18} />
-            </Link>
-            <Link to="/settings" className="chat-topbar-link" aria-label="Settings" title="Settings">
-              <Settings size={18} />
-            </Link>
-          </nav>
         </header>
         <main id="main-content" className="chat-page" tabIndex={0} aria-label="Chat workspace">
         <h1 className="sr-only">{currentConversation?.title || "Chat"}</h1>
         <div className="model-pill glass">{modelLabel}</div>
 
-        <details className="generation-options glass" open={!simpleMode}>
+        <details ref={generationOptions} className="generation-options glass" open={!simpleMode}>
           <summary>More options</summary>
           {currentConversation && (
             <div className="conversation-toolbar">

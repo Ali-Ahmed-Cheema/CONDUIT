@@ -118,11 +118,34 @@ function mergeRecords<T>(current: T[], imported: T[]): T[] {
 export function mergeVaultData(currentValue: unknown, importedValue: unknown): VaultData {
   const current = migrateVaultData(currentValue);
   const imported = migrateVaultData(importedValue);
+  const currentMemories = current.settings.userMemories;
+  const importedMemories = imported.settings.userMemories;
+  let userMemories: string[] | undefined;
+  if (Array.isArray(currentMemories) || Array.isArray(importedMemories)) {
+    const mergedMemories: string[] = [];
+    for (const memory of [
+      ...(Array.isArray(importedMemories) ? importedMemories : []),
+      ...(Array.isArray(currentMemories) ? currentMemories : []),
+    ]) {
+      if (typeof memory !== "string") continue;
+      if (/^The user's name is /i.test(memory)) {
+        for (let index = mergedMemories.length - 1; index >= 0; index -= 1) {
+          if (/^The user's name is /i.test(mergedMemories[index] ?? "")) mergedMemories.splice(index, 1);
+        }
+      }
+      if (!mergedMemories.includes(memory)) mergedMemories.push(memory);
+    }
+    userMemories = mergedMemories.slice(-20);
+  }
   return {
     version: VAULT_SCHEMA_VERSION,
     keys: mergeRecords(current.keys, imported.keys),
     chats: mergeRecords(current.chats, imported.chats),
-    settings: { ...current.settings, ...imported.settings },
+    settings: {
+      ...current.settings,
+      ...imported.settings,
+      ...(userMemories === undefined ? {} : { userMemories }),
+    },
   };
 }
 

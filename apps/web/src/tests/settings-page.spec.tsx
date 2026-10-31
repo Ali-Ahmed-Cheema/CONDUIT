@@ -104,6 +104,18 @@ describe("settings page", () => {
     expect(mocks.clearConnections).toHaveBeenCalledOnce();
     expect(mocks.clearVault).toHaveBeenCalledOnce();
     expect(useAppStore.getState().conversations).toEqual([]);
+    expect(useAppStore.getState().userMemories).toEqual([]);
     expect(useAppStore.getState().theme).toBe("light");
+  });
+
+  it("lets users forget individual cross-chat memories", async () => {
+    const user = userEvent.setup();
+    useAppStore.getState().setUserMemories(["The user's name is Ali.", "The user prefers concise answers."]);
+    renderSettings();
+
+    await user.click(screen.getByRole("button", { name: "Forget memory: The user's name is Ali." }));
+
+    expect(useAppStore.getState().userMemories).toEqual(["The user prefers concise answers."]);
+    expect(screen.queryByText("The user's name is Ali.")).toBeNull();
   });
 });
