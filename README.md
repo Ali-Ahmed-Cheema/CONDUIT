@@ -36,7 +36,7 @@ The workspace opens without a password. On first launch, the app creates a non-e
 
 Encrypted backups use a separate password that you choose when exporting and enter when importing. Keep a backup if you need to move the workspace to another browser or device.
 
-For an individual conversation, open **More options** in the chat to export it as Markdown or JSON. Use **Import chat** there to restore a JSON export; the imported conversation becomes active with its messages and generation settings, ready to continue. API credentials are not included in chat exports.
+For an individual conversation, open **More options** in the chat to export it as Markdown or JSON. To restore a JSON export, open **History** and choose **Import chat**; the imported conversation opens with its messages and generation settings, ready to continue. API credentials are not included in chat exports.
 
 Open **API Config** and add a real supported provider key. CONDUIT validates it with the provider and stores it encrypted in the local API service. Select the connection and a chat model, return to the chat, and send a message. Provider usage may incur charges.
 

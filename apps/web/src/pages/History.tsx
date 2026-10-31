@@ -1,6 +1,7 @@
 import { Pin, PinOff, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "../components/Header";
+import { ImportConversationButton } from "../components/ImportConversationButton";
 import { EmptyState, GlassCard } from "@conduit/ui";
 import { groupConversations } from "../lib/group";
 import { F } from "../lib/time";
@@ -86,6 +87,9 @@ export function HistoryPage() {
       <Header title="History" showBack />
       <main id="main-content" className="history-page">
         <h1 className="sr-only">Chat history</h1>
+        <div className="conversation-toolbar">
+          <ImportConversationButton />
+        </div>
         <form className="search-box glass" role="search" onSubmit={(event) => {
           event.preventDefault();
           setQuery(searchInput);
