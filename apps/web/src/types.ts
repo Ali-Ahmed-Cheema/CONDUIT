@@ -1,4 +1,6 @@
 export type {
+  ChatAlternative,
+  ChatComparisonRequest,
   ChatGenerationOptions,
   ChatMessage,
   Connection,

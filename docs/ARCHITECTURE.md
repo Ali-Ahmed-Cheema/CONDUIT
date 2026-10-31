@@ -72,6 +72,13 @@ the current request, handles reported model and usage events, and renders
 Markdown/GitHub-flavored Markdown. Displayed token counts are estimates, not
 provider-tokenizer counts.
 
+With exactly two configured API connections, chat automatically gathers both
+responses and streams a judge-generated final answer. With three or more
+connections, users can enable comparison, select at least two respondent
+connections, and use a separate connection as judge. Successful respondent
+answers remain available on the assistant message; individual failures are
+reported while the judge continues with the responses that succeeded.
+
 ### Browser vault
 
 The current browser store is IndexedDB database `conduit-v3`, database version
@@ -128,7 +135,9 @@ after 30 minutes. Provider chat retries transient failures before the first
 non-empty stream chunk, with bounded attempts and backoff. Chat request
 validation limits message counts and generation options. The server redacts
 known API keys from user messages before provider forwarding and from provider
-errors/deltas before returning data to the UI.
+errors/deltas before returning data to the UI. Comparison respondents run in
+parallel with a bounded timeout; failures are reported without discarding other
+successful responses.
 
 `server/providers.ts` contains the current explicit adapters for OpenAI,
 Anthropic, Google Gemini, Groq, OpenRouter, Hugging Face Inference Providers,

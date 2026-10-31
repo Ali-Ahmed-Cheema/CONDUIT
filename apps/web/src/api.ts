@@ -5,6 +5,8 @@ import {
   ValidationResultSchema,
 } from "@conduit/core";
 import type {
+  ChatAlternative,
+  ChatComparisonRequest,
   ChatGenerationOptions,
   ChatMessage,
   TokenUsage,
@@ -107,11 +109,14 @@ export async function streamChat(
   signal?: AbortSignal,
   options?: ChatGenerationOptions,
   onUsage?: (usage: TokenUsage) => void,
+  onAlternatives?: (alternatives: ChatAlternative[]) => void,
+  comparison?: ChatComparisonRequest,
+  onComparisonNotice?: (notice: string) => void,
 ): Promise<void> {
   const response = await fetch("/api/chat/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ connectionId, model, messages, ...options }),
+    body: JSON.stringify({ connectionId, model, messages, ...options, ...(comparison ? { comparison } : {}) }),
     signal,
   });
   if (!response.ok || !response.body) {
@@ -136,6 +141,8 @@ export async function streamChat(
     if (parsed.delta) onDelta(parsed.delta);
     if (parsed.model) onModel?.(parsed.model);
     if (parsed.usage) onUsage?.(parsed.usage);
+    if (parsed.alternatives) onAlternatives?.(parsed.alternatives);
+    if (parsed.comparisonNotice) onComparisonNotice?.(parsed.comparisonNotice);
     if (parsed.done) completed = true;
   };
 

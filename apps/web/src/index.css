@@ -336,6 +336,55 @@ textarea {
   gap: 10px;
 }
 
+.generation-options .comparison-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.generation-options .comparison-toggle input,
+.comparison-settings input[type="checkbox"] {
+  width: auto;
+}
+
+.comparison-settings {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+}
+
+.comparison-settings legend {
+  padding: 0 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.comparison-provider {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.comparison-provider > label:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.comparison-settings p {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.comparison-mode-notice {
+  margin: 8px 0;
+  font-size: 0.8rem;
+}
+
 .empty-state {
   display: flex;
   flex: 1;
@@ -406,6 +455,29 @@ textarea {
   white-space: normal;
   overflow-wrap: anywhere;
   position: relative;
+}
+
+.comparison-responses {
+  margin-top: 12px;
+  border-top: 1px solid var(--bd);
+  padding-top: 8px;
+}
+
+.comparison-responses summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.comparison-responses section {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bd);
+}
+
+.comparison-responses h3 {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
 }
 
 .message.user .message-body {

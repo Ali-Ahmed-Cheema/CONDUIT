@@ -2,6 +2,7 @@ import { Copy, Download, Mic, MicOff, Pencil, Pin, PinOff, RefreshCw, SendHorizo
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Link } from "react-router-dom";
+import type { ChatAlternative, ChatComparisonRequest } from "@conduit/core";
 import { ApiRequestError, getConnections, limitChatHistory, streamChat } from "../api";
 import { Header } from "../components/Header";
 import { MarkdownContent } from "../components/MarkdownContent";
@@ -68,6 +69,8 @@ export function ChatPage() {
   const [error, setError] = useState("");
   const [connectionError, setConnectionError] = useState("");
   const [loadingConnections, setLoadingConnections] = useState(true);
+  const [comparisonEnabled, setComparisonEnabled] = useState(false);
+  const [comparisonCandidates, setComparisonCandidates] = useState<ChatComparisonRequest["candidates"]>([]);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [temperature, setTemperature] = useState("");
   const [maxTokens, setMaxTokens] = useState("");
@@ -171,6 +174,29 @@ export function ChatPage() {
   const handleSend = async (contentOverride?: string, existingUserId?: string, continueMessageId?: string) => {
     const userContent = (contentOverride ?? draft).trim();
     if (!userContent || sending) return;
+    const comparison = connections.length === 2
+      ? {
+          mode: "automatic" as const,
+          candidates: connections.map((connection) => ({
+            connectionId: connection.id,
+            model: connection.id === activeConnectionId ? activeModel : connection.models[0] ?? "",
+          })),
+        }
+      : comparisonEnabled
+        ? { mode: "custom" as const, candidates: comparisonCandidates }
+        : undefined;
+    if (comparison && comparison.candidates.length < 2) {
+      setError("Select at least two API connections to compare responses.");
+      return;
+    }
+    if (comparison?.candidates.some((candidate) => !candidate.model)) {
+      setError("Choose a conversational model for each response provider before sending.");
+      return;
+    }
+    if (comparison?.mode === "custom" && comparison.candidates.some((candidate) => candidate.connectionId === activeConnectionId)) {
+      setError("Choose respondent providers that are different from the judge provider.");
+      return;
+    }
     if (!activeConnection || !activeModel) {
       setError("Add and activate a valid API connection before sending.");
       return;
@@ -279,6 +305,23 @@ export function ChatPage() {
             ...item,
             messages: item.messages.map((message) => message.id === assistantId
               ? { ...message, usage: { ...message.usage, ...usage } }
+              : message),
+          }));
+        },
+        (alternatives: ChatAlternative[]) => {
+          updateConversation(conversationId, (item) => ({
+            ...item,
+            messages: item.messages.map((message) => message.id === assistantId
+              ? { ...message, alternatives }
+              : message),
+          }));
+        },
+        comparison,
+        (comparisonNotice) => {
+          updateConversation(conversationId, (item) => ({
+            ...item,
+            messages: item.messages.map((message) => message.id === assistantId
+              ? { ...message, comparisonNotice }
               : message),
           }));
         },
@@ -489,7 +532,7 @@ export function ChatPage() {
           )}
           <div className="generation-fields">
             <label>
-              AI service
+              {comparisonEnabled || connections.length === 2 ? "Judge provider" : "AI service"}
               <select
                 aria-label="Chat connection"
                 value={activeConnectionId ?? ""}
@@ -497,6 +540,9 @@ export function ChatPage() {
                   const nextConnection = connections.find((connection) => connection.id === event.target.value);
                   setActiveConnectionId(nextConnection?.id ?? null);
                   setActiveModel(nextConnection?.models[0] ?? "");
+                  setComparisonCandidates((current) =>
+                    current.filter((candidate) => candidate.connectionId !== nextConnection?.id),
+                  );
                 }}
                 disabled={sending || connections.length === 0}
               >
@@ -506,7 +552,7 @@ export function ChatPage() {
               </select>
             </label>
             <label>
-              Model
+              {comparisonEnabled || connections.length === 2 ? "Judge model" : "Model"}
               <select
                 aria-label="Chat model"
                 value={activeModel}
@@ -517,6 +563,82 @@ export function ChatPage() {
               </select>
             </label>
           </div>
+          {connections.length === 2 && (
+            <p className="comparison-mode-notice" role="status">
+              Automatic comparison is on: both configured APIs respond, and the selected API judges their answers.
+            </p>
+          )}
+          {connections.length > 2 && (
+            <label className="comparison-toggle">
+              <input
+                type="checkbox"
+                aria-label="Enable multi-provider comparison"
+                checked={comparisonEnabled}
+                onChange={(event) => {
+                  const enabled = event.target.checked;
+                  setComparisonEnabled(enabled);
+                  setComparisonCandidates(enabled
+                    ? connections
+                      .filter((connection) => connection.id !== activeConnectionId && connection.models.length > 0)
+                      .map((connection) => ({ connectionId: connection.id, model: connection.models[0] }))
+                    : []);
+                }}
+                disabled={sending}
+              />
+              Enable multi-provider comparison
+            </label>
+          )}
+          {comparisonEnabled && (
+            <fieldset className="comparison-settings" disabled={sending}>
+              <legend>Respondent providers</legend>
+              {connections.map((connection) => {
+                const candidate = comparisonCandidates.find((item) => item.connectionId === connection.id);
+                return (
+                  <div className="comparison-provider" key={connection.id}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        aria-label={`Send to ${connection.providerName} ${connection.keyHint}`}
+                        checked={Boolean(candidate)}
+                        disabled={connection.models.length === 0 || connection.id === activeConnectionId}
+                        onChange={(event) => {
+                          if (event.target.checked) {
+                            setComparisonCandidates((current) => [
+                              ...current,
+                              { connectionId: connection.id, model: connection.models[0] ?? "" },
+                            ]);
+                          } else {
+                            setComparisonCandidates((current) =>
+                              current.filter((item) => item.connectionId !== connection.id),
+                            );
+                          }
+                        }}
+                      />
+                      {connection.providerName} ? {connection.keyHint}
+                    </label>
+                    {candidate && (
+                      <label>
+                        Response model
+                        <select
+                          aria-label={`Response model for ${connection.providerName} ${connection.keyHint}`}
+                          value={candidate.model}
+                          onChange={(event) => setComparisonCandidates((current) => current.map((item) =>
+                            item.connectionId === connection.id ? { ...item, model: event.target.value } : item,
+                          ))}
+                        >
+                          {connection.models.map((model) => <option value={model} key={model}>{model}</option>)}
+                        </select>
+                      </label>
+                    )}
+                  </div>
+                );
+              })}
+              <p>Choose at least two respondent APIs. The judge provider above must be different from every respondent.</p>
+              {comparisonCandidates.length < 2 && (
+                <p className="error-alert" role="status">Select at least two respondent APIs.</p>
+              )}
+            </fieldset>
+          )}
           <label>
             System prompt
             <textarea
@@ -629,6 +751,22 @@ export function ChatPage() {
                       ) : message.content ? (
                         <MarkdownContent content={message.content} onCopyError={() => setError("Could not copy code to the clipboard.")} />
                       ) : sending && message.role === "assistant" ? "Thinking..." : ""}
+                      {message.comparisonNotice && (
+                        <p className="comparison-mode-notice" role="status">{message.comparisonNotice}</p>
+                      )}
+                      {message.alternatives?.length ? (
+                        <details className="comparison-responses">
+                          <summary>View {message.alternatives.length} provider responses</summary>
+                          {message.alternatives.map((alternative, index) => (
+                            <section key={`${alternative.providerName}-${alternative.model}-${index}`}>
+                              <details>
+                                <summary>{alternative.providerName} ? {alternative.model}</summary>
+                                <MarkdownContent content={alternative.content} onCopyError={() => setError("Could not copy code to the clipboard.")} />
+                              </details>
+                            </section>
+                          ))}
+                        </details>
+                      ) : null}
                       {message.role === "assistant" && message.content && (
                         <div className="message-actions">
                           <button

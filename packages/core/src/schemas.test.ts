@@ -26,6 +26,39 @@ describe("shared boundary schemas", () => {
     }).success).toBe(false);
   });
 
+  it("validates automatic and custom provider comparisons", () => {
+    const request = {
+      connectionId: "judge",
+      model: "judge-model",
+      messages: [{ role: "user", content: "hello" }],
+    };
+    const automatic = {
+      mode: "automatic",
+      candidates: [
+        { connectionId: "first", model: "first-model" },
+        { connectionId: "second", model: "second-model" },
+      ],
+    };
+    const custom = {
+      mode: "custom",
+      candidates: [
+        { connectionId: "first", model: "first-model" },
+        { connectionId: "second", model: "second-model" },
+      ],
+    };
+
+    expect(ChatRequestSchema.safeParse({ ...request, comparison: automatic }).success).toBe(true);
+    expect(ChatRequestSchema.safeParse({
+      ...request,
+      comparison: { ...automatic, candidates: [...automatic.candidates, { connectionId: "third", model: "third-model" }] },
+    }).success).toBe(false);
+    expect(ChatRequestSchema.safeParse({
+      ...request,
+      comparison: { ...custom, candidates: [{ connectionId: "judge", model: "judge-model" }, custom.candidates[1]] },
+    }).success).toBe(false);
+    expect(ChatRequestSchema.safeParse({ ...request, comparison: custom }).success).toBe(true);
+  });
+
   it("rejects malformed or secret-bearing public connection responses", () => {
     const connection = {
       id: "connection-1",

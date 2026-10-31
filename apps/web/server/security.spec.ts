@@ -171,6 +171,44 @@ describe("provider error redaction", () => {
     expect(String(providerRequest?.body)).not.toContain(secret);
   });
 
+  it("redacts API keys split across streamed deltas", async () => {
+    readStore.mockResolvedValue({
+      connections: [{
+        id: "connection",
+        provider: "openai",
+        models: ["gpt-test"],
+        encryptedKey: { iv: "", tag: "", ciphertext: "" },
+      }],
+      activeId: "connection",
+    });
+    const midpoint = Math.floor(secret.length / 2);
+    const providerStream = [
+      `data: ${JSON.stringify({ choices: [{ delta: { content: `before ${secret.slice(0, midpoint)}` } }] })}`,
+      `data: ${JSON.stringify({ choices: [{ delta: { content: `${secret.slice(midpoint)} after` } }] })}`,
+      "data: [DONE]",
+      "",
+    ].join("\n\n");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(providerStream, {
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+    })));
+
+    const response = await apiRequest("/api/chat/stream", {
+      method: "POST",
+      body: {
+        connectionId: "connection",
+        model: "gpt-test",
+        messages: [{ role: "user", content: "Hello" }],
+      },
+      origin: allowedOrigin,
+    });
+    const result = await response.text();
+
+    expect(result).not.toContain(secret);
+    expect(result).toContain("[REDACTED]");
+    expect(result).toContain('"done":true');
+  });
+
   it("logs only a generic message for server errors", async () => {
     const logError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     readStore.mockRejectedValueOnce(new Error(`private prompt and credential ${secret}`));
@@ -251,6 +289,176 @@ describe("chat generation options", () => {
       temperature: 0.6,
       max_tokens: 140,
     });
+  });
+});
+
+describe("multi-provider chat comparison", () => {
+  it("collects selected responses and gives them to the selected judge connection", async () => {
+    const makeConnection = (id: string, model: string) => ({
+      id,
+      provider: "openai",
+      providerName: id,
+      keyHint: "********1234",
+      models: [model],
+      encryptedKey: { iv: "", tag: "", ciphertext: "" },
+    });
+    readStore.mockResolvedValue({
+      connections: [
+        makeConnection("judge", "gpt-judge"),
+        makeConnection("openai", "gpt-one"),
+        makeConnection("gemini", "gpt-two"),
+      ],
+      activeId: "judge",
+    });
+    const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as { model: string };
+      const content = body.model === "gpt-one"
+        ? "First provider answer"
+        : body.model === "gpt-two"
+          ? "Second provider answer"
+          : "The best synthesized answer";
+      return Promise.resolve(new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      ));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await apiRequest("/api/chat/stream", {
+      method: "POST",
+      body: {
+        connectionId: "judge",
+        model: "gpt-judge",
+        messages: [{ role: "user", content: "Hello" }],
+        comparison: {
+          mode: "custom",
+          candidates: [
+            { connectionId: "openai", model: "gpt-one" },
+            { connectionId: "gemini", model: "gpt-two" },
+          ],
+        },
+      },
+      origin: allowedOrigin,
+    });
+    const result = await response.text();
+    const judgeCall = fetchMock.mock.calls.find(([, init]) => {
+      const body = JSON.parse(String((init as RequestInit).body)) as { model: string };
+      return body.model === "gpt-judge";
+    });
+    const judgeBody = JSON.parse(String((judgeCall?.[1] as RequestInit | undefined)?.body)) as {
+      messages: Array<{ content: string }>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(result).toContain('"providerName":"openai"');
+    expect(result).toContain('"providerName":"gemini"');
+    expect(result).toContain('"delta":"The best synthesized answer"');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(judgeBody.messages.some((message) =>
+      message.content.includes("First provider answer") && message.content.includes("Second provider answer"),
+    )).toBe(true);
+  });
+
+  it("automatically compares both connections when exactly two are configured", async () => {
+    const makeConnection = (id: string, model: string) => ({
+      id,
+      provider: "openai",
+      providerName: id,
+      keyHint: "********1234",
+      models: [model],
+      encryptedKey: { iv: "", tag: "", ciphertext: "" },
+    });
+    readStore.mockResolvedValue({
+      connections: [makeConnection("first", "gpt-first"), makeConnection("second", "gpt-second")],
+      activeId: "first",
+    });
+    const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as { model: string; messages: Array<{ content: string }> };
+      const judging = body.messages.some((message) => message.content.includes("Compare these provider responses"));
+      const content = judging ? "Judged answer" : `${body.model} answer`;
+      return Promise.resolve(new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      ));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await apiRequest("/api/chat/stream", {
+      method: "POST",
+      body: {
+        connectionId: "first",
+        model: "gpt-first",
+        messages: [{ role: "user", content: "Hello" }],
+      },
+      origin: allowedOrigin,
+    });
+    const result = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(result).toContain('"providerName":"first"');
+    expect(result).toContain('"providerName":"second"');
+    expect(result).toContain('"delta":"Judged answer"');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("judges the successful responses and reports failed respondents", async () => {
+    const makeConnection = (id: string, model: string) => ({
+      id,
+      provider: "openai",
+      providerName: id,
+      keyHint: "********1234",
+      models: [model],
+      encryptedKey: { iv: "", tag: "", ciphertext: "" },
+    });
+    readStore.mockResolvedValue({
+      connections: [
+        makeConnection("judge", "gpt-judge"),
+        makeConnection("failed", "gpt-failed"),
+        makeConnection("success", "gpt-success"),
+      ],
+      activeId: "judge",
+    });
+    const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as { model: string; messages: Array<{ content: string }> };
+      if (body.model === "gpt-failed") {
+        return Promise.resolve(new Response(JSON.stringify({ error: { message: "provider unavailable" } }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }));
+      }
+      const judging = body.messages.some((message) => message.content.includes("Compare these provider responses"));
+      const content = judging ? "Judged successful answer" : "Successful respondent answer";
+      return Promise.resolve(new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      ));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await apiRequest("/api/chat/stream", {
+      method: "POST",
+      body: {
+        connectionId: "judge",
+        model: "gpt-judge",
+        messages: [{ role: "user", content: "Hello" }],
+        comparison: {
+          mode: "custom",
+          candidates: [
+            { connectionId: "failed", model: "gpt-failed" },
+            { connectionId: "success", model: "gpt-success" },
+          ],
+        },
+      },
+      origin: allowedOrigin,
+    });
+    const result = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(result).toContain('"providerName":"success"');
+    expect(result).not.toContain('"providerName":"failed"');
+    expect(result).toContain('"comparisonNotice":"Some provider responses were unavailable: failed:');
+    expect(result).toContain('"delta":"Judged successful answer"');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });
 

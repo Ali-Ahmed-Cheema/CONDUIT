@@ -78,6 +78,57 @@ describe("chat event stream", () => {
       .rejects.toThrow("The provider rejected this API key.");
   });
 
+  it("sends comparison choices and returns provider responses from the stream", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(chunkedStream([
+      `data: ${JSON.stringify({ alternatives: [
+        { providerName: "OpenAI", model: "gpt-one", content: "First answer" },
+        { providerName: "Gemini", model: "gemini-test", content: "Second answer" },
+      ] })}`,
+      `data: ${JSON.stringify({ comparisonNotice: "One provider failed." })}`,
+      'data: {"delta":"Best answer"}',
+      'data: {"done":true}',
+    ].join("\r\n\r\n") + "\r\n\r\n"))));
+    const alternatives: Array<{ providerName: string; model: string; content: string }> = [];
+    const deltas: string[] = [];
+    const notices: string[] = [];
+
+    await streamChat(
+      "judge",
+      "gpt-judge",
+      [{ role: "user", content: "Hello" }],
+      (delta) => deltas.push(delta),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (responses) => alternatives.push(...responses),
+      {
+        candidates: [
+          { connectionId: "openai", model: "gpt-one" },
+          { connectionId: "gemini", model: "gemini-test" },
+        ],
+        mode: "custom",
+      },
+      (notice) => notices.push(notice),
+    );
+
+    const request = vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      connectionId: "judge",
+      model: "gpt-judge",
+      comparison: {
+        mode: "custom",
+        candidates: [
+          { connectionId: "openai", model: "gpt-one" },
+          { connectionId: "gemini", model: "gemini-test" },
+        ],
+      },
+    });
+    expect(alternatives.map(({ content }) => content)).toEqual(["First answer", "Second answer"]);
+    expect(deltas).toEqual(["Best answer"]);
+    expect(notices).toEqual(["One provider failed."]);
+  });
+
   it("rejects streams that close without a completion event", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(
       chunkedStream('data: {"delta":"partial"}\n\n'),

@@ -114,10 +114,19 @@ export const TokenUsageSchema = z.object({
 });
 export type TokenUsage = z.infer<typeof TokenUsageSchema>;
 
+export const ChatAlternativeSchema = z.object({
+  providerName: z.string().min(1).max(100),
+  model: z.string().min(1).max(200),
+  content: z.string(),
+}).strict();
+export type ChatAlternative = z.infer<typeof ChatAlternativeSchema>;
+
 export const WorkspaceChatMessageSchema = z.object({
   id: z.string().optional(),
   role: z.enum(["user", "assistant"]),
   content: z.string(),
+  alternatives: z.array(ChatAlternativeSchema).max(10).optional(),
+  comparisonNotice: z.string().max(4_000).optional(),
   ts: z.number().finite().optional(),
   model: z.string().optional(),
   usage: TokenUsageSchema.optional(),
@@ -154,11 +163,32 @@ export const ChatGenerationOptionsSchema = z.object({
 });
 export type ChatGenerationOptions = z.infer<typeof ChatGenerationOptionsSchema>;
 
+export const ChatComparisonRequestSchema = z.object({
+  mode: z.enum(["automatic", "custom"]),
+  candidates: z.array(z.object({
+    connectionId: z.string().min(1),
+    model: z.string().min(1),
+  }).strict()).min(2).max(10),
+}).strict().refine(
+  (comparison) => new Set(comparison.candidates.map(({ connectionId }) => connectionId)).size
+    === comparison.candidates.length,
+  { message: "Response connections must be unique.", path: ["candidates"] },
+).refine(
+  (comparison) => comparison.mode !== "automatic" || comparison.candidates.length === 2,
+  { message: "Automatic comparison requires exactly two response connections.", path: ["candidates"] },
+);
+export type ChatComparisonRequest = z.infer<typeof ChatComparisonRequestSchema>;
+
 export const ChatRequestSchema = ChatGenerationOptionsSchema.extend({
-  connectionId: z.string(),
-  model: z.string(),
+  connectionId: z.string().min(1),
+  model: z.string().min(1),
   messages: z.array(ApiChatMessageSchema).min(1).max(100),
-});
+  comparison: ChatComparisonRequestSchema.optional(),
+}).refine(
+  (request) => request.comparison?.mode !== "custom"
+    || !request.comparison.candidates.some((candidate) => candidate.connectionId === request.connectionId),
+  { message: "The judge connection cannot also be a respondent in custom comparison mode.", path: ["comparison", "candidates"] },
+);
 
 export const ValidateKeyRequestSchema = z.object({
   apiKey: z.string().max(4096).refine((value) => value.trim().length >= 8),
@@ -181,6 +211,8 @@ export const ChatStreamEventSchema = z.object({
   status: z.number().optional(),
   done: z.boolean().optional(),
   usage: TokenUsageSchema.optional(),
+  alternatives: z.array(ChatAlternativeSchema).max(10).optional(),
+  comparisonNotice: z.string().max(4_000).optional(),
 });
 export type ChatStreamEvent = z.infer<typeof ChatStreamEventSchema>;
 

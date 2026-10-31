@@ -34,7 +34,7 @@ vi.mock("@tanstack/react-virtual", () => ({
 
 import { ChatPage } from "../pages/Chat";
 import { useAppStore, type ChatConversation } from "../store";
-import type { Connection, ConnectionsResponse, TokenUsage } from "../types";
+import type { ChatAlternative, ChatComparisonRequest, Connection, ConnectionsResponse, TokenUsage } from "../types";
 
 const connection: Connection = {
   id: "connection",
@@ -106,6 +106,94 @@ afterEach(() => {
 });
 
 describe("chat page", () => {
+  it("automatically compares both configured APIs when exactly two connections exist", async () => {
+    const gemini: Connection = {
+      ...connection,
+      id: "gemini",
+      provider: "google",
+      providerName: "Gemini",
+      models: ["gemini-model"],
+    };
+    mocks.getConnections.mockResolvedValue({
+      connections: [connection, gemini],
+      activeId: connection.id,
+    });
+    const user = userEvent.setup();
+    renderChat();
+    await screen.findByText(/OpenAI ? gpt-test/);
+
+    expect(screen.getByText(/Automatic comparison is on/)).toBeTruthy();
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Hello both");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Mocked response")).toBeTruthy();
+    expect(mocks.streamChat.mock.calls[0]?.[9]).toEqual({
+      mode: "automatic",
+      candidates: [
+        { connectionId: connection.id, model: "gpt-test" },
+        { connectionId: "gemini", model: "gemini-model" },
+      ],
+    });
+  });
+
+  it("lets users select separate respondents and a judge and inspect originals", async () => {
+    const openai: Connection = { ...connection, id: "openai", models: ["gpt-one"] };
+    const gemini: Connection = {
+      ...connection,
+      id: "gemini",
+      provider: "google",
+      providerName: "Gemini",
+      models: ["gemini-model"],
+    };
+    const judge: Connection = {
+      ...connection,
+      id: "judge",
+      provider: "groq",
+      providerName: "Groq",
+      models: ["groq-model"],
+    };
+    mocks.getConnections.mockResolvedValue({ connections: [openai, gemini, judge], activeId: judge.id });
+    mocks.streamChat.mockImplementationOnce(async (
+      _connectionId: string,
+      _model: string,
+      _messages: unknown[],
+      onDelta: (delta: string) => void,
+      _onModel?: (model: string) => void,
+      _signal?: AbortSignal,
+      _options?: unknown,
+      _onUsage?: (usage: TokenUsage) => void,
+      onAlternatives?: (alternatives: ChatAlternative[]) => void,
+      _comparison?: ChatComparisonRequest,
+    ) => {
+      onAlternatives?.([
+        { providerName: "OpenAI", model: "gpt-one", content: "OpenAI original" },
+        { providerName: "Gemini", model: "gemini-model", content: "Gemini original" },
+      ]);
+      onDelta("Groq final answer");
+    });
+    const user = userEvent.setup();
+    renderChat();
+    await screen.findByText(/Groq ? groq-model/);
+    await user.click(screen.getByText("More options"));
+    await user.click(screen.getByRole("checkbox", { name: "Enable multi-provider comparison" }));
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Hello everyone");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Groq final answer")).toBeTruthy();
+    expect(mocks.streamChat.mock.calls[0]?.[9]).toEqual({
+      mode: "custom",
+      candidates: [
+        { connectionId: "openai", model: "gpt-one" },
+        { connectionId: "gemini", model: "gemini-model" },
+      ],
+    });
+    await user.click(screen.getByText("View 2 provider responses"));
+    await user.click(screen.getByText("OpenAI ? gpt-one"));
+    expect(screen.getByText("OpenAI original")).toBeTruthy();
+    await user.click(screen.getByText("Gemini ? gemini-model"));
+    expect(screen.getByText("Gemini original")).toBeTruthy();
+  });
+
   it("sends a message and stores the streamed model and usage", async () => {
     const user = userEvent.setup();
     renderChat();
