@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { readUiPreferences, useAppStore } from "./store";
 import { openDeviceVault, writeDeviceVault } from "@conduit/storage";
+import { CommandPalette } from "./components/CommandPalette";
 
 const ChatPage = lazy(() => import("./pages/Chat").then((module) => ({ default: module.ChatPage })));
 const HistoryPage = lazy(() => import("./pages/History").then((module) => ({ default: module.HistoryPage })));
@@ -149,16 +150,19 @@ function AppShell() {
 
   return (
     <Suspense fallback={<div className="shell-loading" role="status" aria-busy="true">Loading your workspace…</div>}>
-      <Routes>
-        <Route path="/" element={<ChatPage />} />
-        <Route path="/history" element={<HistoryPage />} />
-        <Route path="/api-config" element={<ApiConfigPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="/getting-started" element={<GettingStartedPage />} />
-        <Route path="/credentials" element={<CredentialsPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <>
+        <CommandPalette />
+        <Routes>
+          <Route path="/" element={<ChatPage />} />
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/api-config" element={<ApiConfigPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/getting-started" element={<GettingStartedPage />} />
+          <Route path="/credentials" element={<CredentialsPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </>
     </Suspense>
   );
 }

@@ -2484,8 +2484,7 @@ textarea:focus-visible {
 .chat-topbar,
 .chat-topbar-actions,
 .chat-sidebar-link,
-.sidebar-conversation,
-.chat-sidebar-profile {
+.sidebar-conversation {
   display: flex;
   align-items: center;
 }
@@ -2618,49 +2617,6 @@ textarea:focus-visible {
   padding: 0 10px;
   color: var(--chat-muted);
   font-size: 0.8rem;
-}
-
-.chat-sidebar-profile {
-  min-width: 0;
-  gap: 10px;
-  padding: 10px 4px 2px;
-  border-top: 1px solid var(--chat-border);
-}
-
-.chat-profile-avatar {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
-  place-items: center;
-  border-radius: 50%;
-  background: #176f67;
-  color: white;
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.chat-profile-copy {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.chat-profile-copy strong,
-.chat-profile-copy small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-profile-copy strong {
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.chat-profile-copy small {
-  color: var(--chat-muted);
-  font-size: 0.69rem;
 }
 
 .chat-sidebar button:hover,
@@ -2938,16 +2894,7 @@ textarea:focus-visible {
   box-shadow: 0 0 0 2px #b8755d33, 0 12px 32px #0003;
 }
 
-.composer-mode-tabs {
-  background: #1b1917;
-}
-
-.composer-mode-tabs button.is-selected {
-  background: #36302b;
-}
-
-.chat-page .composer .primary-button,
-.chat-profile-avatar {
+.chat-page .composer .primary-button {
   border-color: #d17a54;
   background: #d17a54;
   color: #211713;
@@ -3101,8 +3048,7 @@ textarea:focus-visible {
 .sidebar-collapsed .chat-sidebar-link span,
 .sidebar-collapsed .sidebar-new-chat span,
 .sidebar-collapsed .sidebar-conversation-section h2,
-.sidebar-collapsed .sidebar-conversation > span,
-.sidebar-collapsed .chat-profile-copy {
+.sidebar-collapsed .sidebar-conversation > span {
   display: none;
 }
 
@@ -3122,10 +3068,6 @@ textarea:focus-visible {
 
 .sidebar-collapsed .sidebar-conversation-section {
   margin-top: 8px;
-}
-
-.sidebar-collapsed .chat-sidebar-profile {
-  justify-content: center;
 }
 
 .sidebar-collapsed .chat-topbar-toggle {
@@ -3269,33 +3211,6 @@ textarea:focus-visible {
   line-height: 1.5;
 }
 
-.chat-profile-avatar {
-  background: #176f67;
-  color: white;
-}
-
-.chat-profile-copy {
-  flex: 1;
-}
-
-.sidebar-profile-settings {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
-  place-items: center;
-  border-radius: 9px;
-  color: var(--chat-muted);
-}
-
-.workspace-plan {
-  padding: 6px 10px;
-  border: 1px solid #2f2f2f;
-  border-radius: 999px;
-  color: #d7d7d7;
-  font-size: 0.75rem;
-}
-
 .chat-page {
   padding: 10px clamp(16px, 5vw, 64px) max(12px, env(safe-area-inset-bottom));
 }
@@ -3355,33 +3270,6 @@ textarea:focus-visible {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 5px;
-}
-
-.composer-mode-tabs {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 3px;
-  border-radius: 10px;
-  background: #171717;
-}
-
-.composer-mode-tabs button {
-  min-height: 30px;
-  padding: 0 11px;
-  border: 0;
-  border-radius: 8px;
-  color: var(--chat-muted);
-  font-size: 0.76rem;
-}
-
-.composer-mode-tabs button.is-selected {
-  background: #303030;
-  color: var(--chat-text);
-}
-
-.composer-mode-tabs button:disabled {
-  opacity: 0.55;
 }
 
 .composer-model {
@@ -3475,8 +3363,7 @@ textarea:focus-visible {
 }
 
 .sidebar-collapsed .sidebar-new-chat kbd,
-.sidebar-collapsed .sidebar-history-heading,
-.sidebar-collapsed .sidebar-profile-settings {
+.sidebar-collapsed .sidebar-history-heading {
   display: none;
 }
 
@@ -3496,10 +3383,6 @@ textarea:focus-visible {
 }
 
 @media (max-width: 520px) {
-  .chat-topbar-actions .workspace-plan {
-    display: none;
-  }
-
   .composer-model {
     max-width: 45%;
   }
@@ -3692,8 +3575,6 @@ textarea:focus-visible {
 }
 
 .chat-sidebar-link,
-.chat-profile-avatar,
-.workspace-plan,
 .welcome-suggestions button,
 .composer-model,
 .composer-model svg,
@@ -3701,7 +3582,6 @@ textarea:focus-visible {
   color: var(--chat-text);
 }
 
-.chat-profile-avatar,
 .chat-page .composer .primary-button {
   border-color: var(--chat-text);
   background: var(--chat-text);
@@ -3713,9 +3593,7 @@ textarea:focus-visible {
 .chat-page .generation-options input,
 .chat-page .generation-options textarea,
 .chat-page .generation-options select,
-.chat-page .conversation-toolbar input,
-.composer-mode-tabs,
-.composer-mode-tabs button.is-selected {
+.chat-page .conversation-toolbar input {
   border-color: var(--chat-border);
   background: var(--chat-bg);
   color: var(--chat-text);

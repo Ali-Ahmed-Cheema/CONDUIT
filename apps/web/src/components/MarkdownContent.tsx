@@ -6,6 +6,8 @@ import {
   createGeneratedFilesZip,
   downloadGeneratedFile,
   extractGeneratedCodeFiles,
+  generatedFileNameForCode,
+  type GeneratedCodeFile,
 } from "../lib/generatedFiles";
 import { CodePreview } from "./CodePreview";
 
@@ -99,6 +101,8 @@ export function MarkdownContent({
   const [downloadFailed, setDownloadFailed] = useState(false);
   const generatedFiles = extractGeneratedCodeFiles(content);
   const hasProjectFiles = generatedFiles.length > 1 || generatedFiles.some((file) => file.name.includes("/"));
+  const renderedFiles: GeneratedCodeFile[] = [];
+  const usedNames = new Set<string>();
   let renderedCodeBlockIndex = 0;
   const downloadFile = (file: Blob, name: string) => {
     try {
@@ -130,6 +134,17 @@ export function MarkdownContent({
       const code = getTextContent(codeProps?.children ?? children);
       const language = codeProps?.className?.match(/language-([^\s]+)/)?.[1];
       const generatedFile = generatedFiles[fileIndex];
+      let fileName = generatedFileNameForCode(language, generatedFile?.name);
+      if (usedNames.has(fileName.toLowerCase())) {
+        const lastDot = fileName.lastIndexOf(".");
+        const stem = lastDot > 0 ? fileName.slice(0, lastDot) : fileName;
+        const extension = lastDot > 0 ? fileName.slice(lastDot) : "";
+        let suffix = 2;
+        while (usedNames.has(`${stem}-${suffix}${extension}`.toLowerCase())) suffix += 1;
+        fileName = `${stem}-${suffix}${extension}`;
+      }
+      usedNames.add(fileName.toLowerCase());
+      renderedFiles.push({ name: fileName, content: code });
 
       return (
         <div className="code-block">
@@ -138,26 +153,24 @@ export function MarkdownContent({
             <div className="code-toolbar-actions">
               <CodePreview code={code} language={language} />
               <CopyCodeButton code={code} onCopyError={onCopyError} />
-              {generatedFile && (
-                <button
-                  type="button"
-                  className="code-copy-button"
-                  aria-label={`Download ${generatedFile.name}`}
-                  title={`Download ${generatedFile.name}`}
-                  onClick={() => downloadFile(new Blob([generatedFile.content], { type: "text/plain;charset=utf-8" }), generatedFile.name)}
-                >
-                  <Download size={14} />
-                </button>
-              )}
+              <button
+                type="button"
+                className="code-copy-button"
+                aria-label={`Download ${fileName}`}
+                title={`Download ${fileName}`}
+                onClick={() => downloadFile(new Blob([code], { type: "text/plain;charset=utf-8" }), fileName)}
+              >
+                <Download size={14} />
+              </button>
               {fileIndex === 0 && hasProjectFiles && (
                 <button
                   type="button"
                   className="code-copy-button"
                   aria-label="Download project as ZIP"
                   title="Download project as ZIP"
-                  onClick={() => {
+                  onClick={async () => {
                     try {
-                      const zip = createGeneratedFilesZip(generatedFiles);
+                      const zip = await createGeneratedFilesZip(renderedFiles);
                       const archive = new ArrayBuffer(zip.byteLength);
                       new Uint8Array(archive).set(zip);
                       downloadGeneratedFile(

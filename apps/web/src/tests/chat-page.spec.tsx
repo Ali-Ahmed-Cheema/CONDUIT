@@ -118,6 +118,15 @@ afterEach(() => {
 });
 
 describe("chat page", () => {
+  it("does not show placeholder plan, profile, or cowork UI", async () => {
+    renderChat();
+    await screen.findByText(/OpenAI · gpt-test/);
+
+    expect(screen.queryByText("Free plan")).toBeNull();
+    expect(screen.queryByText("Cowork")).toBeNull();
+    expect(screen.queryByText("Ali")).toBeNull();
+  });
+
   it("automatically compares both configured APIs when exactly two connections exist", async () => {
     const gemini: Connection = {
       ...connection,

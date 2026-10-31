@@ -30,8 +30,8 @@ describe("generated code files", () => {
     ]);
   });
 
-  it("creates a ZIP that keeps project folders and file contents", () => {
-    const zip = createGeneratedFilesZip([
+  it("creates a ZIP that keeps project folders and file contents", async () => {
+    const zip = await createGeneratedFilesZip([
       { name: "src/main.cpp", content: "int main() {}\n" },
       { name: "README.md", content: "# Project\n" },
     ]);

@@ -1,8 +1,13 @@
+// @vitest-environment jsdom
+
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatTableAsTsv, MarkdownContent } from "../components/MarkdownContent";
 import { CodePreview, createCodePreviewDocument } from "../components/CodePreview";
+
+afterEach(cleanup);
 
 describe("chat Markdown rendering", () => {
   it("renders common text formatting and tables", () => {
@@ -90,6 +95,38 @@ describe("chat Markdown rendering", () => {
 
     expect(markup).toContain('aria-label="Download src/main.cpp"');
     expect(markup).toContain('aria-label="Download project as ZIP"');
+  });
+
+  it("downloads the exact rendered code using its language extension", async () => {
+    const markdown = '```csharp filename="ApiResponse.txt"\npublic class ApiResponse {}\n\n```';
+    const blobs: Blob[] = [];
+    const downloads: string[] = [];
+    const previousCreateObjectURL = Object.getOwnPropertyDescriptor(URL, "createObjectURL");
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn((blob: Blob) => {
+        blobs.push(blob);
+        return "blob:generated";
+      }),
+    });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      downloads.push(this.download);
+    });
+
+    try {
+      const { container } = render(createElement(MarkdownContent, { content: markdown, onCopyError: () => {} }));
+      await screen.getByRole("button", { name: "Download ApiResponse.cs" }).click();
+
+      expect(downloads).toEqual(["ApiResponse.cs"]);
+      expect(await blobs[0]?.text()).toBe(container.querySelector(".code-block pre code")?.textContent);
+    } finally {
+      click.mockRestore();
+      if (previousCreateObjectURL) {
+        Object.defineProperty(URL, "createObjectURL", previousCreateObjectURL);
+      } else {
+        Reflect.deleteProperty(URL, "createObjectURL");
+      }
+    }
   });
 
   it("adds a separate copy control to inline code", () => {

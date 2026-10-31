@@ -1,5 +1,3 @@
-import { strToU8, zipSync } from "fflate";
-
 export type GeneratedCodeFile = {
   name: string;
   content: string;
@@ -57,6 +55,17 @@ function extensionForLanguage(language: string): string {
   if (knownExtension) return knownExtension;
   if (/^[a-z0-9][a-z0-9.+-]*$/.test(normalized)) return normalized;
   return "txt";
+}
+
+export function generatedFileNameForCode(language: string | undefined, suggestedName?: string): string {
+  const extension = extensionForLanguage(language ?? "");
+  if (suggestedName) {
+    if (extension !== "txt" && suggestedName.toLowerCase().endsWith(".txt")) {
+      return `${suggestedName.slice(0, -4)}.${extension}`;
+    }
+    return suggestedName;
+  }
+  return `generated.${extension}`;
 }
 
 function infoTokens(info: string): string[] {
@@ -152,7 +161,8 @@ export function extractGeneratedCodeFiles(markdown: string): GeneratedCodeFile[]
   return files;
 }
 
-export function createGeneratedFilesZip(files: GeneratedCodeFile[]): Uint8Array {
+export async function createGeneratedFilesZip(files: GeneratedCodeFile[]): Promise<Uint8Array> {
+  const { strToU8, zipSync } = await import("fflate");
   const entries: Record<string, Uint8Array> = {};
   for (const file of files) entries[file.name] = strToU8(file.content);
   return zipSync(entries);

@@ -1,13 +1,26 @@
 import {
-  Copy,
-  Download,
+  BookOpen,
+  Coffee,
+  Code2,
+  Clock3,
   FileText,
-  Folder,
+  Copy,
+  Filter,
+  GraduationCap,
   Image as ImageIcon,
+  MessageSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PenLine,
+  Plus,
+  Search,
+  Settings,
+  Sparkles,
+  Download,
+  Folder,
   Languages,
   Mic,
   MicOff,
-  Paperclip,
   Pencil,
   Pin,
   PinOff,
@@ -26,12 +39,11 @@ import { MAX_CHAT_HISTORY_CHARACTERS } from "@conduit/core";
 import type { ChatAttachment } from "@conduit/core";
 import { ApiRequestError, getConnections, limitChatHistory, streamChat } from "../api";
 import { GitHubRepositoryPicker } from "../components/GitHubRepositoryPicker";
-import { Header } from "../components/Header";
 import { MarkdownContent } from "../components/MarkdownContent";
-import { EmptyState, Toast } from "@conduit/ui";
+import { Toast } from "@conduit/ui";
 import { convertFileToText } from "../lib/attachmentText";
 import { estimateTokens, makeTokenSummary } from "../lib/tokens";
-import { fullDateTime, greeting, msgTime } from "../lib/time";
+import { fullDateTime, msgTime } from "../lib/time";
 import { useAppStore } from "../store";
 import type { ChatAlternative, ChatComparisonRequest } from "../types";
 
@@ -123,6 +135,7 @@ export function ChatPage() {
   const activeModel = useAppStore((state) => state.activeModel);
   const setActiveModel = useAppStore((state) => state.setActiveModel);
   const activeConversationId = useAppStore((state) => state.activeConversationId);
+  const setActiveConversationId = useAppStore((state) => state.setActiveConversationId);
   const conversations = useAppStore((state) => state.conversations);
   const addConversation = useAppStore((state) => state.addConversation);
   const appendMessage = useAppStore((state) => state.appendMessage);
@@ -140,8 +153,8 @@ export function ChatPage() {
   const [processingAttachments, setProcessingAttachments] = useState(false);
   const [loadingConnections, setLoadingConnections] = useState(true);
   const [comparisonEnabled, setComparisonEnabled] = useState(false);
-  const [comparisonJudgeMode, setComparisonJudgeMode] = useState<"provider" | "system">("provider");
   const [comparisonCandidates, setComparisonCandidates] = useState<ChatComparisonRequest["candidates"]>([]);
+  const [comparisonJudgeMode, setComparisonJudgeMode] = useState<"provider" | "system">("provider");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [temperature, setTemperature] = useState("");
   const [maxTokens, setMaxTokens] = useState("");
@@ -155,6 +168,8 @@ export function ChatPage() {
   const [translatingMessageId, setTranslatingMessageId] = useState<string | null>(null);
   const [translationErrors, setTranslationErrors] = useState<Record<string, string>>({});
   const [dictating, setDictating] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 720);
+  const [sidebarSearch, setSidebarSearch] = useState("");
   const messagesPanel = useRef<HTMLElement>(null);
   const shouldAutoScroll = useRef(true);
   const previousConversationId = useRef(activeConversationId);
@@ -163,6 +178,7 @@ export function ChatPage() {
   const translationController = useRef<AbortController | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
+  const sidebarSearchInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => () => {
     requestController.current?.abort();
@@ -171,6 +187,19 @@ export function ChatPage() {
     window.speechSynthesis?.cancel();
   }, []);
 
+  useEffect(() => {
+    const handleNewChatShortcut = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "k") return;
+      event.preventDefault();
+      setActiveConversationId(null);
+      setDraft("");
+      setAttachments([]);
+      setError("");
+    };
+    window.addEventListener("keydown", handleNewChatShortcut);
+    return () => window.removeEventListener("keydown", handleNewChatShortcut);
+  }, [setActiveConversationId]);
+
   const speechRecognition = (window as SpeechWindow).SpeechRecognition
     ?? (window as SpeechWindow).webkitSpeechRecognition;
 
@@ -178,8 +207,17 @@ export function ChatPage() {
     () => conversations.find((conversation) => conversation.id === activeConversationId) ?? null,
     [conversations, activeConversationId],
   );
-  const comparisonActive = connections.length === 2 || comparisonEnabled;
+  const sortedConversations = useMemo(
+    () => [...conversations].sort((first, second) => second.updatedAt - first.updatedAt),
+    [conversations],
+  );
+  const matchingConversations = sortedConversations.filter((conversation) =>
+    conversation.title.toLocaleLowerCase().includes(sidebarSearch.trim().toLocaleLowerCase()),
+  );
+  const pinnedConversations = matchingConversations.filter((conversation) => conversation.pinned);
+  const recentConversations = matchingConversations.filter((conversation) => !conversation.pinned);
   const activeConnection = connections.find((connection) => connection.id === activeConnectionId) ?? null;
+  const comparisonActive = connections.length === 2 || comparisonEnabled;
   const messages = currentConversation?.messages ?? [];
   const virtualizer = useVirtualizer({
     count: messages.length,
@@ -335,8 +373,8 @@ export function ChatPage() {
     }
     const comparison = connections.length === 2
       ? {
-          judgeMode: comparisonJudgeMode,
           mode: "automatic" as const,
+          judgeMode: comparisonJudgeMode,
           candidates: connections.map((connection) => ({
             connectionId: connection.id,
             model: connection.id === activeConnectionId ? activeModel : connection.models[0] ?? "",
@@ -780,9 +818,142 @@ export function ChatPage() {
   const virtualMessages = virtualizer.getVirtualItems();
 
   return (
-    <div className="page-shell">
-      <Header title="Chat" />
-      <main id="main-content" className="chat-page" tabIndex={0} aria-label="Chat workspace">
+    <div className={`chat-workspace${sidebarOpen ? "" : " sidebar-collapsed"}`}>
+      <aside className="chat-sidebar" aria-label="Main sidebar">
+        <div className="chat-sidebar-header">
+          <Link to="/" className="chat-sidebar-brand" aria-label="Conduit home">
+            <span className="conduit-asterisk" aria-hidden="true">✳</span>
+            <span>Conduit</span>
+          </Link>
+          <button
+            type="button"
+            className="sidebar-icon-button"
+            aria-label="Collapse sidebar"
+            title="Collapse sidebar"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <PanelLeftClose size={19} />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          className="sidebar-new-chat"
+          onClick={() => {
+            setActiveConversationId(null);
+            setDraft("");
+            setAttachments([]);
+            setError("");
+          }}
+        >
+          <Plus size={18} aria-hidden="true" />
+          <span>New chat</span>
+          <kbd>Ctrl K</kbd>
+        </button>
+
+        <label className="chat-sidebar-search">
+          <Search size={17} aria-hidden="true" />
+          <span className="sr-only">Search conversations</span>
+          <input
+            ref={sidebarSearchInput}
+            type="search"
+            aria-label="Search conversations"
+            placeholder="Search"
+            value={sidebarSearch}
+            onChange={(event) => setSidebarSearch(event.target.value)}
+          />
+        </label>
+
+        <nav className="chat-sidebar-nav" aria-label="Workspace navigation">
+          <button type="button" className="chat-sidebar-link" onClick={() => sidebarSearchInput.current?.focus()}>
+            <Search size={18} aria-hidden="true" /><span>Search chats</span>
+          </button>
+          <Link to="/api-config" className="chat-sidebar-link">
+            <Sparkles size={18} aria-hidden="true" /><span>Connect AI</span>
+          </Link>
+          <Link to="/history" className="chat-sidebar-link">
+            <Clock3 size={18} aria-hidden="true" /><span>History</span>
+          </Link>
+          <Link to="/getting-started" className="chat-sidebar-link">
+            <BookOpen size={18} aria-hidden="true" /><span>Getting started</span>
+          </Link>
+          <Link to="/settings" className="chat-sidebar-link">
+            <Settings size={18} aria-hidden="true" /><span>Settings</span>
+          </Link>
+        </nav>
+
+        <div className="chat-sidebar-conversations">
+          <div className="sidebar-history-heading">
+            <span>Chats and tasks</span>
+            <Filter size={16} aria-hidden="true" />
+          </div>
+          {pinnedConversations.length > 0 && (
+            <section className="sidebar-conversation-section" aria-label="Pinned conversations">
+              <h2>Pinned</h2>
+              {pinnedConversations.map((conversation) => (
+                <button
+                  type="button"
+                  key={conversation.id}
+                  className={`sidebar-conversation${conversation.id === activeConversationId ? " is-active" : ""}`}
+                  aria-current={conversation.id === activeConversationId ? "page" : undefined}
+                  title={conversation.title}
+                  onClick={() => setActiveConversationId(conversation.id)}
+                >
+                  <MessageSquare size={16} aria-hidden="true" />
+                  <span>{conversation.title}</span>
+                </button>
+              ))}
+            </section>
+          )}
+          {recentConversations.length > 0 && (
+            <section className="sidebar-conversation-section" aria-label="Recent conversations">
+              {recentConversations.map((conversation) => (
+                <button
+                  type="button"
+                  key={conversation.id}
+                  className={`sidebar-conversation${conversation.id === activeConversationId ? " is-active" : ""}`}
+                  aria-current={conversation.id === activeConversationId ? "page" : undefined}
+                  title={conversation.title}
+                  onClick={() => setActiveConversationId(conversation.id)}
+                >
+                  <MessageSquare size={16} aria-hidden="true" />
+                  <span>{conversation.title}</span>
+                </button>
+              ))}
+            </section>
+          )}
+          {matchingConversations.length === 0 && !sidebarSearch && (
+            <p className="sidebar-empty">Your chats will show up here.</p>
+          )}
+          {sidebarSearch && matchingConversations.length === 0 && (
+            <p className="sidebar-no-results">No matching conversations</p>
+          )}
+        </div>
+
+      </aside>
+
+      <div className="chat-content">
+        <header className="chat-topbar">
+          <button
+            type="button"
+            className="sidebar-icon-button chat-topbar-toggle"
+            aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            onClick={() => setSidebarOpen((open) => !open)}
+          >
+            {sidebarOpen ? <PanelLeftClose size={19} /> : <PanelLeftOpen size={19} />}
+          </button>
+          <span className="chat-topbar-label">{currentConversation?.title || "Chat"}</span>
+          <nav className="chat-topbar-actions" aria-label="Chat actions">
+            <Link to="/history" className="chat-topbar-link" aria-label="History" title="History">
+              <Clock3 size={18} />
+            </Link>
+            <Link to="/settings" className="chat-topbar-link" aria-label="Settings" title="Settings">
+              <Settings size={18} />
+            </Link>
+          </nav>
+        </header>
+        <main id="main-content" className="chat-page" tabIndex={0} aria-label="Chat workspace">
         <h1 className="sr-only">{currentConversation?.title || "Chat"}</h1>
         <div className="model-pill glass">{modelLabel}</div>
 
@@ -853,6 +1024,7 @@ export function ChatPage() {
                 {activeConnection?.models.map((model) => <option value={model} key={model}>{model}</option>)}
               </select>
             </label>
+          </div>
           {comparisonActive && (
             <label>
               Final response by
@@ -875,7 +1047,6 @@ export function ChatPage() {
               </select>
             </label>
           )}
-          </div>
           {connections.length === 2 && (
             <p className="comparison-mode-notice" role="status">
               Automatic comparison is on: both configured APIs respond. The system can select the closest response, or the selected API can synthesize a final answer.
@@ -1038,7 +1209,10 @@ export function ChatPage() {
           }}
         >
           {messages.length === 0 ? (
-            <EmptyState title={greeting()} description="Ask me anything. Write a message below and press Send." />
+            <div className="welcome-hero">
+              <h2>Where should we begin?</h2>
+              <p>What would you like to work on?</p>
+            </div>
           ) : (
             <div className="messages-virtual-content" style={{ height: `${virtualizer.getTotalSize()}px` }}>
               {virtualMessages.map((virtualItem) => {
@@ -1187,6 +1361,12 @@ export function ChatPage() {
         </div>
 
         <div className="composer glass">
+          <div className="composer-topline">
+            <span className="composer-model" title={modelLabel}>
+              <Sparkles size={15} aria-hidden="true" />
+              <span>{activeModel || (loadingConnections ? "Connecting…" : "Choose a model")}</span>
+            </span>
+          </div>
           {attachments.length > 0 && (
             <ul className="attachment-list pending-attachments" aria-label="Files to attach">
               {attachments.map((file, index) => (
@@ -1211,7 +1391,7 @@ export function ChatPage() {
             aria-label="Message"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder={activeConnection ? "Write a message..." : "Connect an AI service before chatting"}
+            placeholder={activeConnection ? "Ask Conduit" : "Connect an AI service before chatting"}
             rows={2}
             onInput={(event) => {
               event.currentTarget.style.height = "auto";
@@ -1248,14 +1428,14 @@ export function ChatPage() {
             <div className="attachment-control">
               <button
                 type="button"
-                className="secondary-button"
+                className="composer-attach-button"
                 aria-label="Attach"
                 aria-expanded={attachmentMenuOpen}
                 title="Images are converted to English OCR text; other binary files are converted to text"
                 onClick={() => setAttachmentMenuOpen((open) => !open)}
                 disabled={!activeConnection || loadingConnections || sending || processingAttachments}
               >
-                <Paperclip size={16} /> {processingAttachments ? "Reading/OCR attachments..." : "Attach"}
+                <Plus size={19} /> <span>{processingAttachments ? "Reading attachments…" : "Add files"}</span>
               </button>
               {attachmentMenuOpen && (
                 <div id="attachment-options" className="attachment-options" aria-label="Attachment options">
@@ -1294,7 +1474,7 @@ export function ChatPage() {
                 aria-label={dictating ? "Stop microphone" : "Start microphone"}
               >
                 {dictating ? <MicOff size={20} /> : <Mic size={20} />}
-                {dictating ? "Stop microphone" : "Microphone"}
+                <span>{dictating ? "Stop" : "Voice"}</span>
               </button>
             )}
             {sending ? (
@@ -1313,11 +1493,31 @@ export function ChatPage() {
                 onClick={() => void handleSend()}
                 disabled={(!draft.trim() && attachments.length === 0) || !activeConnection || !activeModel || processingAttachments}
               >
-                <SendHorizonal size={16} /> Send
+                <SendHorizonal size={17} /> <span>Send</span>
               </button>
             )}
           </div>
         </div>
+
+        {messages.length === 0 && (
+          <div className="welcome-suggestions" aria-label="Prompt suggestions">
+            <button type="button" onClick={() => setDraft("Help me write, debug, or review this code: ")}>
+              <Code2 size={16} aria-hidden="true" /><span>Code</span>
+            </button>
+            <button type="button" onClick={() => setDraft("Teach me about this topic: ")}>
+              <GraduationCap size={16} aria-hidden="true" /><span>Learn</span>
+            </button>
+            <button type="button" onClick={() => setDraft("Help me write or edit: ")}>
+              <PenLine size={16} aria-hidden="true" /><span>Write</span>
+            </button>
+            <button type="button" onClick={() => setDraft("Help me think through this: ")}>
+              <Coffee size={16} aria-hidden="true" /><span>Life stuff</span>
+            </button>
+            <button type="button" onClick={() => setDraft("Surprise me with something interesting.")}>
+              <Sparkles size={16} aria-hidden="true" /><span>Conduit’s choice</span>
+            </button>
+          </div>
+        )}
 
         <p className="chat-footer">Conduit can make mistakes. {tokenSummary} tokens</p>
         {connectionError && <p className="error-alert" role="alert">{connectionError} <Link to="/api-config">Open API Config</Link></p>}
@@ -1327,6 +1527,7 @@ export function ChatPage() {
         {error && <p className="error-alert" role="alert">{error}</p>}
         {vaultError && <p className="error-alert" role="alert">{vaultError}</p>}
       </main>
+      </div>
       {copiedMessageId && <Toast message="Copied to clipboard." onDismiss={() => setCopiedMessageId(null)} />}
     </div>
   );

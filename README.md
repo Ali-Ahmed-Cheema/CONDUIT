@@ -68,6 +68,16 @@ corepack pnpm test
 
 `corepack pnpm build` builds the chat app. `corepack pnpm test` runs the repository test suite. Use `corepack pnpm preview` to serve the production build locally.
 
+## Keyboard shortcuts
+
+- **Ctrl/Cmd + K** opens the command palette from anywhere in the workspace.
+- Type to find app commands or search conversation titles and messages; use **Up/Down** and **Enter** to select.
+- **Ctrl/Cmd + Shift + N** starts a new chat.
+- **Ctrl/Cmd + ,** opens Settings.
+- Press **Escape** to close the palette and return focus to where you were.
+
+The palette can also change the theme, text size, contrast, motion, transparency, and Simple Mode without leaving the current page.
+
 ## Security
 
 Provider credentials are sent only to the local API service for validation and chat, then encrypted at rest. Chat history and settings are encrypted in IndexedDB. The device vault key is stored in the same browser profile, so this is not a password or authentication boundary: anyone with access to the browser profile or code running in the app origin may access the workspace. Do not expose the local API service to an untrusted network or commit `.env` files.
