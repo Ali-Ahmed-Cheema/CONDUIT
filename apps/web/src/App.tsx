@@ -9,6 +9,7 @@ const ApiConfigPage = lazy(() => import("./pages/ApiConfig").then((module) => ({
 const SettingsPage = lazy(() => import("./pages/Settings").then((module) => ({ default: module.SettingsPage })));
 const AboutPage = lazy(() => import("./pages/About").then((module) => ({ default: module.AboutPage })));
 const CredentialsPage = lazy(() => import("./pages/Credentials").then((module) => ({ default: module.CredentialsPage })));
+const GettingStartedPage = lazy(() => import("./pages/GettingStarted").then((module) => ({ default: module.GettingStartedPage })));
 
 async function persistVault(setVaultError: (message: string | null) => void) {
   const state = useAppStore.getState();
@@ -154,6 +155,7 @@ function AppShell() {
         <Route path="/api-config" element={<ApiConfigPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/about" element={<AboutPage />} />
+        <Route path="/getting-started" element={<GettingStartedPage />} />
         <Route path="/credentials" element={<CredentialsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
