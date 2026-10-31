@@ -4,6 +4,7 @@ WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json ./apps/web/package.json
+COPY packages/ ./packages/
 RUN corepack pnpm install --frozen-lockfile
 COPY . .
 RUN corepack pnpm build
@@ -17,8 +18,10 @@ WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json ./apps/web/package.json
-RUN corepack pnpm install --filter @conduit/web --prod --frozen-lockfile
+COPY --from=build /app/packages/ ./packages/
+RUN corepack pnpm install --filter "@conduit/web..." --prod --frozen-lockfile
 COPY --from=build /app/apps/web/server ./apps/web/server
+COPY --from=build /app/apps/web/scripts ./apps/web/scripts
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 RUN addgroup -S conduit && adduser -S conduit -G conduit \
   && mkdir -p /app/frontend/conduit/data \

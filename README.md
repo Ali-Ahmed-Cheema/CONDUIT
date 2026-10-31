@@ -70,6 +70,33 @@ corepack pnpm test
 
 `corepack pnpm build` builds the chat app. `corepack pnpm test` runs the repository test suite. Use `corepack pnpm preview` to serve the production build locally.
 
+## Container deployment
+
+The Docker image and Compose file are for a single-user instance on a trusted
+machine, not a public multi-user service. The API accepts localhost host names
+only, and the Compose port is bound to the host loopback interface.
+
+Create the root `.env` with a private encryption key before starting the
+container:
+
+```powershell
+$key = corepack pnpm --silent generate:key
+"CONDUIT_ENCRYPTION_KEY=$key" | Set-Content -Encoding ascii .env
+Remove-Variable key
+docker compose up --build -d
+docker compose ps
+docker compose logs conduit
+```
+
+Open `http://localhost:3001`. Compose persists API connection records in the
+`conduit-data` volume; keep the encryption key and volume together in backups,
+since the key is required to decrypt saved provider credentials. Keep `.env`
+private and out of source control. Docker must be installed and running.
+
+Do not publish the container port to an untrusted network or use this setup as
+a public deployment: this app has no user authentication or multi-user
+isolation. Its API intentionally rejects non-local host names.
+
 ## Keyboard shortcuts
 
 - **Ctrl/Cmd + K** opens the command palette from anywhere in the workspace.
