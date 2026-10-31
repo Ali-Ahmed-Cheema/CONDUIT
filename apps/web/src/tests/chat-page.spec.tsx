@@ -289,7 +289,8 @@ describe("chat page", () => {
     const user = userEvent.setup();
     renderChat();
     await screen.findByText(/Groq · groq-model/);
-    await user.click(screen.getByText("More options"));
+    const sidebarNav = screen.getByRole("navigation", { name: "Workspace navigation" });
+    await user.click(within(sidebarNav).getByRole("button", { name: "More options" }));
     await user.click(screen.getByRole("checkbox", { name: "Enable multi-provider comparison" }));
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Hello everyone");
     await user.click(screen.getByRole("button", { name: "Send" }));

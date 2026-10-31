@@ -3588,6 +3588,26 @@ textarea:focus-visible {
   color: var(--chat-bg);
 }
 
+.chat-page .messages-panel {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+}
+
+.chat-page .messages-panel,
+.chat-page .generation-options,
+.chat-page .composer,
+.chat-page .welcome-suggestions {
+  width: min(100%, 960px);
+}
+
+.chat-page .composer {
+  flex: 0 0 auto;
+}
+
 .chat-page .composer,
 .chat-page .generation-options,
 .chat-page .generation-options input,
