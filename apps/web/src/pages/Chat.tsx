@@ -139,6 +139,7 @@ export function ChatPage() {
   const [processingAttachments, setProcessingAttachments] = useState(false);
   const [loadingConnections, setLoadingConnections] = useState(true);
   const [comparisonEnabled, setComparisonEnabled] = useState(false);
+  const [comparisonJudgeMode, setComparisonJudgeMode] = useState<"provider" | "system">("provider");
   const [comparisonCandidates, setComparisonCandidates] = useState<ChatComparisonRequest["candidates"]>([]);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [temperature, setTemperature] = useState("");
@@ -176,6 +177,7 @@ export function ChatPage() {
     () => conversations.find((conversation) => conversation.id === activeConversationId) ?? null,
     [conversations, activeConversationId],
   );
+  const comparisonActive = connections.length === 2 || comparisonEnabled;
   const activeConnection = connections.find((connection) => connection.id === activeConnectionId) ?? null;
   const messages = currentConversation?.messages ?? [];
   const virtualizer = useVirtualizer({
@@ -332,6 +334,7 @@ export function ChatPage() {
     }
     const comparison = connections.length === 2
       ? {
+          judgeMode: comparisonJudgeMode,
           mode: "automatic" as const,
           candidates: connections.map((connection) => ({
             connectionId: connection.id,
@@ -339,7 +342,7 @@ export function ChatPage() {
           })),
         }
       : comparisonEnabled
-        ? { mode: "custom" as const, candidates: comparisonCandidates }
+        ? { mode: "custom" as const, judgeMode: comparisonJudgeMode, candidates: comparisonCandidates }
         : undefined;
     if (comparison && comparison.candidates.length < 2) {
       setError("Select at least two API connections to compare responses.");
@@ -351,6 +354,7 @@ export function ChatPage() {
     }
     if (
       comparison?.mode === "custom" &&
+      comparison.judgeMode === "provider" &&
       comparison.candidates.some((candidate) => candidate.connectionId === activeConnectionId)
     ) {
       setError("Choose respondent providers that are different from the judge provider.");
@@ -816,7 +820,7 @@ export function ChatPage() {
           )}
           <div className="generation-fields">
             <label>
-              {comparisonEnabled || connections.length === 2 ? "Judge provider" : "AI service"}
+              {comparisonActive ? "Judge provider" : "AI service"}
               <select
                 aria-label="Chat connection"
                 value={activeConnectionId ?? ""}
@@ -824,9 +828,11 @@ export function ChatPage() {
                   const nextConnection = connections.find((connection) => connection.id === event.target.value);
                   setActiveConnectionId(nextConnection?.id ?? null);
                   setActiveModel(nextConnection?.models[0] ?? "");
-                  setComparisonCandidates((current) =>
-                    current.filter((candidate) => candidate.connectionId !== nextConnection?.id),
-                  );
+                  if (comparisonJudgeMode === "provider") {
+                    setComparisonCandidates((current) =>
+                      current.filter((candidate) => candidate.connectionId !== nextConnection?.id),
+                    );
+                  }
                 }}
                 disabled={sending || connections.length === 0}
               >
@@ -836,7 +842,7 @@ export function ChatPage() {
               </select>
             </label>
             <label>
-              {comparisonEnabled || connections.length === 2 ? "Judge model" : "Model"}
+              {comparisonActive ? "Judge model" : "Model"}
               <select
                 aria-label="Chat model"
                 value={activeModel}
@@ -846,10 +852,32 @@ export function ChatPage() {
                 {activeConnection?.models.map((model) => <option value={model} key={model}>{model}</option>)}
               </select>
             </label>
+          {comparisonActive && (
+            <label>
+              Final response by
+              <select
+                aria-label="Comparison judge"
+                value={comparisonJudgeMode}
+                onChange={(event) => {
+                  const judgeMode = event.target.value === "system" ? "system" : "provider";
+                  setComparisonJudgeMode(judgeMode);
+                  if (judgeMode === "provider" && activeConnectionId) {
+                    setComparisonCandidates((current) =>
+                      current.filter((candidate) => candidate.connectionId !== activeConnectionId),
+                    );
+                  }
+                }}
+                disabled={sending}
+              >
+                <option value="system">System (select the closest response)</option>
+                <option value="provider">Selected API key (synthesize responses)</option>
+              </select>
+            </label>
+          )}
           </div>
           {connections.length === 2 && (
             <p className="comparison-mode-notice" role="status">
-              Automatic comparison is on: both configured APIs respond, and the selected API judges their answers.
+              Automatic comparison is on: both configured APIs respond. The system can select the closest response, or the selected API can synthesize a final answer.
             </p>
           )}
           {connections.length > 2 && (
@@ -863,7 +891,10 @@ export function ChatPage() {
                   setComparisonEnabled(enabled);
                   setComparisonCandidates(enabled
                     ? connections
-                      .filter((connection) => connection.id !== activeConnectionId && connection.models.length > 0)
+                      .filter((connection) => (
+                        (comparisonJudgeMode === "system" || connection.id !== activeConnectionId)
+                        && connection.models.length > 0
+                      ))
                       .map((connection) => ({ connectionId: connection.id, model: connection.models[0] }))
                     : []);
                 }}
@@ -884,7 +915,8 @@ export function ChatPage() {
                         type="checkbox"
                         aria-label={`Send to ${connection.providerName} ${connection.keyHint}`}
                         checked={Boolean(candidate)}
-                        disabled={connection.models.length === 0 || connection.id === activeConnectionId}
+                        disabled={connection.models.length === 0
+                          || (comparisonJudgeMode === "provider" && connection.id === activeConnectionId)}
                         onChange={(event) => {
                           if (event.target.checked) {
                             setComparisonCandidates((current) => [
@@ -918,7 +950,8 @@ export function ChatPage() {
                 );
               })}
               <p>
-                Choose at least two respondent APIs. The judge provider above must be different from every respondent.
+                Choose at least two respondent APIs. With System selected, the closest response is returned without another API call.
+                With an API key selected, that provider must not also be a respondent.
               </p>
               {comparisonCandidates.length < 2 && (
                 <p className="error-alert" role="status">Select at least two respondent APIs.</p>

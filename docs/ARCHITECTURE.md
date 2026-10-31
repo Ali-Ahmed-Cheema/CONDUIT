@@ -73,11 +73,14 @@ Markdown/GitHub-flavored Markdown. Displayed token counts are estimates, not
 provider-tokenizer counts.
 
 With exactly two configured API connections, chat automatically gathers both
-responses and streams a judge-generated final answer. With three or more
-connections, users can enable comparison, select at least two respondent
-connections, and use a separate connection as judge. Successful respondent
+responses. Users can return the system-selected response with the closest
+word overlap to the latest prompt, or have the selected API connection judge
+and synthesize a final answer. With three or more connections, users can enable
+comparison, select at least two respondent connections, and choose either the
+system selector or a separate API connection as judge. Successful respondent
 answers remain available on the assistant message; individual failures are
-reported while the judge continues with the responses that succeeded.
+reported while the final-response step continues with the responses that
+succeeded.
 
 ### Browser vault
 

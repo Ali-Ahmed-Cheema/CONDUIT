@@ -401,6 +401,56 @@ describe("multi-provider chat comparison", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it("uses the system judge to stream the response closest to the user's prompt", async () => {
+    const makeConnection = (id: string, model: string) => ({
+      id,
+      provider: "openai",
+      providerName: id,
+      keyHint: "********1234",
+      models: [model],
+      encryptedKey: { iv: "", tag: "", ciphertext: "" },
+    });
+    readStore.mockResolvedValue({
+      connections: [makeConnection("first", "gpt-first"), makeConnection("second", "gpt-second")],
+      activeId: "first",
+    });
+    const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as { model: string };
+      const content = body.model === "gpt-first"
+        ? "Cooking recipes use ovens and spices."
+        : "Plants use sunlight to make food through photosynthesis.";
+      return Promise.resolve(new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      ));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await apiRequest("/api/chat/stream", {
+      method: "POST",
+      body: {
+        connectionId: "first",
+        model: "gpt-first",
+        messages: [{ role: "user", content: "Explain how plants use sunlight to make food." }],
+        comparison: {
+          mode: "automatic",
+          judgeMode: "system",
+          candidates: [
+            { connectionId: "first", model: "gpt-first" },
+            { connectionId: "second", model: "gpt-second" },
+          ],
+        },
+      },
+      origin: allowedOrigin,
+    });
+    const result = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(result).toContain('"delta":"Plants use sunlight to make food through photosynthesis."');
+    expect(result).toContain('"comparisonNotice":"System selected second (gpt-second) as the closest match to your message."');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("judges the successful responses and reports failed respondents", async () => {
     const makeConnection = (id: string, model: string) => ({
       id,

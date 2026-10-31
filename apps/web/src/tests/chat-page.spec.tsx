@@ -136,12 +136,14 @@ describe("chat page", () => {
 
     expect(screen.getByText(/Automatic comparison is on/)).toBeTruthy();
     expect(screen.queryByRole("checkbox", { name: "Compare multiple API connections" })).toBeNull();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Comparison judge" }), "system");
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Hello both");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByText("Mocked response")).toBeTruthy();
     expect(mocks.streamChat.mock.calls[0]?.[9]).toEqual({
       mode: "automatic",
+      judgeMode: "system",
       candidates: [
         { connectionId: connection.id, model: "gpt-test" },
         { connectionId: "gemini", model: "gemini-model" },
@@ -254,6 +256,7 @@ describe("chat page", () => {
     expect(mocks.streamChat.mock.calls[0]?.[1]).toBe("groq-model");
     expect(mocks.streamChat.mock.calls[0]?.[9]).toEqual({
       mode: "custom",
+      judgeMode: "provider",
       candidates: [
         { connectionId: "openai", model: "gpt-one" },
         { connectionId: "gemini", model: "gemini-model" },

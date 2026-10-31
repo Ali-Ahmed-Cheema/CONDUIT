@@ -176,6 +176,7 @@ export type ChatGenerationOptions = z.infer<typeof ChatGenerationOptionsSchema>;
 
 export const ChatComparisonRequestSchema = z.object({
   mode: z.enum(["automatic", "custom"]),
+  judgeMode: z.enum(["provider", "system"]).optional(),
   candidates: z.array(z.object({
     connectionId: z.string().min(1),
     model: z.string().min(1),
@@ -201,6 +202,7 @@ export const ChatRequestSchema = ChatGenerationOptionsSchema.extend({
   { message: "Conversation history exceeds the supported size.", path: ["messages"] },
 ).refine(
   (request) => request.comparison?.mode !== "custom"
+    || request.comparison.judgeMode === "system"
     || !request.comparison.candidates.some((candidate) => candidate.connectionId === request.connectionId),
   { message: "The judge connection cannot also be a respondent in custom comparison mode.", path: ["comparison", "candidates"] },
 );

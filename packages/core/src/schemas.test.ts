@@ -80,6 +80,28 @@ describe("shared boundary schemas", () => {
       ...request,
       comparison: {
         mode: "custom",
+        judgeMode: "system",
+        candidates: [
+          { connectionId: "connection-1", model: "model-1" },
+          { connectionId: "connection-2", model: "model-2" },
+        ],
+      },
+    }).success).toBe(true);
+    expect(ChatRequestSchema.safeParse({
+      ...request,
+      comparison: {
+        mode: "custom",
+        judgeMode: "provider",
+        candidates: [
+          { connectionId: "connection-1", model: "model-1" },
+          { connectionId: "connection-2", model: "model-2" },
+        ],
+      },
+    }).success).toBe(false);
+    expect(ChatRequestSchema.safeParse({
+      ...request,
+      comparison: {
+        mode: "custom",
         candidates: [
           { connectionId: "connection-2", model: "model-2" },
           { connectionId: "connection-3", model: "model-3" },
