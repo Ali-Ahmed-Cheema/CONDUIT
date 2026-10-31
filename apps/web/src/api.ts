@@ -2,6 +2,7 @@ import {
   ChatStreamEventSchema,
   ConnectionsResponseSchema,
   ErrorResponseSchema,
+  MAX_CHAT_HISTORY_CHARACTERS,
   ValidationResultSchema,
 } from "@conduit/core";
 import type {
@@ -83,7 +84,11 @@ export const removeConnection = (id: string) =>
 export const clearConnections = () =>
   request("/api/connections", ConnectionsResponseSchema, { method: "DELETE" });
 
-export function limitChatHistory(messages: ChatMessage[], maxMessages = 30, maxCharacters = 48_000): ChatMessage[] {
+export function limitChatHistory(
+  messages: ChatMessage[],
+  maxMessages = 30,
+  maxCharacters = MAX_CHAT_HISTORY_CHARACTERS,
+): ChatMessage[] {
   const recent: ChatMessage[] = [];
   let characterCount = 0;
   for (let index = messages.length - 1; index >= 0 && recent.length < maxMessages; index -= 1) {

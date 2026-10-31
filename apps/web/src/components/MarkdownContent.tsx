@@ -7,6 +7,7 @@ import {
   downloadGeneratedFile,
   extractGeneratedCodeFiles,
 } from "../lib/generatedFiles";
+import { CodePreview } from "./CodePreview";
 
 function getTextContent(children: ReactNode): string {
   return Children.toArray(children)
@@ -107,6 +108,13 @@ export function MarkdownContent({
     }
   };
   const components: Components = {
+    a({ href, children, node: _node, ...props }) {
+      return (
+        <a {...props} href={href} target="_blank" rel="noopener noreferrer">
+          {children}
+        </a>
+      );
+    },
     table({ children }) {
       return <TableWithCopy onCopyError={onCopyError}>{children}</TableWithCopy>;
     },
@@ -127,7 +135,8 @@ export function MarkdownContent({
         <div className="code-block">
           <div className="code-toolbar">
             <span>{language ?? "Code"}</span>
-            <div style={{ display: "flex", gap: 6 }}>
+            <div className="code-toolbar-actions">
+              <CodePreview code={code} language={language} />
               <CopyCodeButton code={code} onCopyError={onCopyError} />
               {generatedFile && (
                 <button

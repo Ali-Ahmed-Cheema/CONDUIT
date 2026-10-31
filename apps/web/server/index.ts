@@ -97,7 +97,7 @@ app.use((request, response, next) => {
   }
   next();
 });
-app.use(express.json({ limit: "64kb" }));
+app.use(express.json({ limit: "1mb" }));
 app.use("/api/v4", createTypedApiMiddleware(() => getServerFeatureFlags().typedApi));
 
 function rateLimit(maximum: number, windowMs: number): express.RequestHandler {

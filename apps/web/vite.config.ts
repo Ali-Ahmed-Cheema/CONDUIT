@@ -12,6 +12,7 @@ export default defineConfig({
       registerType: "autoUpdate",
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,webp,woff,woff2,webmanifest}"],
+        globIgnores: ["**/ocr-assets/**"],
         navigateFallbackDenylist: [/^\/api(?:\/|$)/],
         runtimeCaching: [],
       },

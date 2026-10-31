@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  ChatAttachmentSchema,
   ChatRequestSchema,
   ConnectionStoreSchema,
   ConnectionsResponseSchema,
+  MAX_CHAT_HISTORY_CHARACTERS,
   resolveFeatureFlags,
   ValidateKeyRequestSchema,
   VaultBackupSchema,
   VaultDataSchema,
+  WorkspaceChatMessageSchema,
 } from "./schemas";
 
 describe("shared boundary schemas", () => {
@@ -24,39 +27,94 @@ describe("shared boundary schemas", () => {
       ...request,
       messages: [{ role: "system", content: "system messages are not accepted by this endpoint" }],
     }).success).toBe(false);
+    expect(ChatRequestSchema.safeParse({
+      ...request,
+      messages: [{ role: "user", content: "x".repeat(MAX_CHAT_HISTORY_CHARACTERS + 1) }],
+    }).success).toBe(false);
+    expect(ChatRequestSchema.safeParse({
+      ...request,
+      comparison: {
+        mode: "automatic",
+        candidates: [
+          { connectionId: "connection-1", model: "model-1" },
+          { connectionId: "connection-2", model: "model-2" },
+        ],
+      },
+    }).success).toBe(true);
+    expect(ChatRequestSchema.safeParse({
+      ...request,
+      comparison: {
+        mode: "automatic",
+        candidates: [
+          { connectionId: "connection-1", model: "model-1" },
+          { connectionId: "connection-1", model: "model-2" },
+        ],
+      },
+    }).success).toBe(false);
+    expect(ChatRequestSchema.safeParse({
+      ...request,
+      comparison: { candidates: [{ connectionId: "connection-1", model: "model-1" }] },
+    }).success).toBe(false);
+    expect(ChatRequestSchema.safeParse({
+      ...request,
+      comparison: {
+        mode: "automatic",
+        candidates: [
+          { connectionId: "connection-1", model: "model-1" },
+          { connectionId: "connection-2", model: "model-2" },
+          { connectionId: "connection-3", model: "model-3" },
+        ],
+      },
+    }).success).toBe(false);
+    expect(ChatRequestSchema.safeParse({
+      ...request,
+      comparison: {
+        mode: "custom",
+        candidates: [
+          { connectionId: "connection-1", model: "model-1" },
+          { connectionId: "connection-2", model: "model-2" },
+        ],
+      },
+    }).success).toBe(false);
+    expect(ChatRequestSchema.safeParse({
+      ...request,
+      comparison: {
+        mode: "custom",
+        candidates: [
+          { connectionId: "connection-2", model: "model-2" },
+          { connectionId: "connection-3", model: "model-3" },
+        ],
+      },
+    }).success).toBe(true);
   });
 
-  it("validates automatic and custom provider comparisons", () => {
-    const request = {
-      connectionId: "judge",
-      model: "judge-model",
-      messages: [{ role: "user", content: "hello" }],
-    };
-    const automatic = {
-      mode: "automatic",
-      candidates: [
-        { connectionId: "first", model: "first-model" },
-        { connectionId: "second", model: "second-model" },
-      ],
-    };
-    const custom = {
-      mode: "custom",
-      candidates: [
-        { connectionId: "first", model: "first-model" },
-        { connectionId: "second", model: "second-model" },
-      ],
-    };
-
-    expect(ChatRequestSchema.safeParse({ ...request, comparison: automatic }).success).toBe(true);
-    expect(ChatRequestSchema.safeParse({
-      ...request,
-      comparison: { ...automatic, candidates: [...automatic.candidates, { connectionId: "third", model: "third-model" }] },
+  it("accepts any number of attachments within the chat text limit", () => {
+    expect(ChatAttachmentSchema.safeParse({
+      name: "notes.txt",
+      size: 5,
+      type: "text/plain",
+      content: "notes",
+    }).success).toBe(true);
+    const attachments = Array.from({ length: 20 }, (_, index) => ({
+      name: `file-${index}.bin`,
+      size: 128 * 1024,
+      content: "converted to text",
+    }));
+    expect(ChatAttachmentSchema.safeParse(attachments[0]).success).toBe(true);
+    expect(WorkspaceChatMessageSchema.safeParse({
+      role: "user",
+      content: "",
+      attachments,
+    }).success).toBe(true);
+    expect(WorkspaceChatMessageSchema.safeParse({
+      role: "user",
+      content: "",
+      attachments: [{
+        name: "large.txt",
+        size: 1,
+        content: "x".repeat(MAX_CHAT_HISTORY_CHARACTERS + 1),
+      }],
     }).success).toBe(false);
-    expect(ChatRequestSchema.safeParse({
-      ...request,
-      comparison: { ...custom, candidates: [{ connectionId: "judge", model: "judge-model" }, custom.candidates[1]] },
-    }).success).toBe(false);
-    expect(ChatRequestSchema.safeParse({ ...request, comparison: custom }).success).toBe(true);
   });
 
   it("rejects malformed or secret-bearing public connection responses", () => {

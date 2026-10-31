@@ -492,6 +492,29 @@ textarea {
   margin-top: 8px;
 }
 
+.translation-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.translation-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.translation-controls select {
+  max-width: 100%;
+}
+
+.translation-controls small {
+  color: var(--mut);
+}
+
 .message-edit {
   display: grid;
   gap: 8px;
@@ -616,6 +639,39 @@ textarea {
   border-bottom: 1px solid var(--bd);
   color: var(--mut);
   font-size: 0.75rem;
+}
+
+.code-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-action-button {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--bd);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+.code-preview-panel {
+  border-top: 1px solid var(--bd);
+  background: #fff;
+}
+
+.code-preview-panel iframe {
+  display: block;
+  width: 100%;
+  height: 240px;
+  border: 0;
+  color-scheme: light;
 }
 
 .code-block pre {
@@ -745,18 +801,77 @@ textarea {
 }
 
 .composer-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
   gap: 8px;
   align-items: center;
 }
 
-.composer-row:has(select[aria-label="Chat connection"]) {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+.attachment-control {
+  position: relative;
 }
 
-.composer-row select {
+.attachment-options {
+  position: absolute;
+  z-index: 2;
+  bottom: calc(100% + 8px);
+  left: 0;
+  display: grid;
+  gap: 8px;
+  min-width: max-content;
+  padding: 8px;
+  border: 1px solid var(--bd);
+  border-radius: 12px;
+  background: var(--bg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+
+.attachment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pending-attachments {
+  margin-bottom: 8px;
+}
+
+.message-attachments {
+  margin-top: 8px;
+}
+
+.attachment-chip {
+  display: inline-flex;
   min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  background: var(--gl);
+  font-size: 0.8rem;
+}
+
+.attachment-chip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-chip small {
+  color: var(--mut);
+  white-space: nowrap;
+}
+
+.attachment-chip .icon-button {
+  min-width: 30px;
+  min-height: 30px;
+  padding: 4px;
 }
 
 .primary-button, .secondary-button, .danger-button {
@@ -1415,10 +1530,6 @@ textarea {
 
   .brand-time {
     font-size: 0.62rem;
-  }
-
-  .composer-row:has(select[aria-label="Chat connection"]) {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   }
 
   .composer-row .primary-button {

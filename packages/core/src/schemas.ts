@@ -108,6 +108,16 @@ export const ChatMessageSchema = z.object({
 });
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 
+export const MAX_CHAT_HISTORY_CHARACTERS = 180_000;
+
+export const ChatAttachmentSchema = z.object({
+  name: z.string().min(1).max(255),
+  size: z.number().int().min(0),
+  type: z.string().max(128).optional(),
+  content: z.string().max(MAX_CHAT_HISTORY_CHARACTERS),
+});
+export type ChatAttachment = z.infer<typeof ChatAttachmentSchema>;
+
 export const TokenUsageSchema = z.object({
   input: z.number().optional(),
   output: z.number().optional(),
@@ -125,6 +135,7 @@ export const WorkspaceChatMessageSchema = z.object({
   id: z.string().optional(),
   role: z.enum(["user", "assistant"]),
   content: z.string(),
+  attachments: z.array(ChatAttachmentSchema).optional(),
   alternatives: z.array(ChatAlternativeSchema).max(10).optional(),
   comparisonNotice: z.string().max(4_000).optional(),
   ts: z.number().finite().optional(),
@@ -185,6 +196,10 @@ export const ChatRequestSchema = ChatGenerationOptionsSchema.extend({
   messages: z.array(ApiChatMessageSchema).min(1).max(100),
   comparison: ChatComparisonRequestSchema.optional(),
 }).refine(
+  (request) => request.messages.reduce((total, message) => total + message.content.length, 0)
+    <= MAX_CHAT_HISTORY_CHARACTERS,
+  { message: "Conversation history exceeds the supported size.", path: ["messages"] },
+).refine(
   (request) => request.comparison?.mode !== "custom"
     || !request.comparison.candidates.some((candidate) => candidate.connectionId === request.connectionId),
   { message: "The judge connection cannot also be a respondent in custom comparison mode.", path: ["comparison", "candidates"] },

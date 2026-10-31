@@ -8,6 +8,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getConnections: vi.fn(),
   streamChat: vi.fn(),
+  createOcrWorker: vi.fn(),
+}));
+
+vi.mock("tesseract.js", () => ({
+  createWorker: mocks.createOcrWorker,
 }));
 
 vi.mock("../api", async (importOriginal) => {
@@ -84,6 +89,10 @@ function setupStore(conversations: ChatConversation[] = []) {
 
 beforeEach(() => {
   mocks.getConnections.mockReset().mockResolvedValue(connectionsResult);
+  mocks.createOcrWorker.mockReset().mockResolvedValue({
+    recognize: vi.fn().mockResolvedValue({ data: { text: "Recognized image text" } }),
+    terminate: vi.fn().mockResolvedValue(undefined),
+  });
   mocks.streamChat.mockReset().mockImplementation(async (
     _connectionId: string,
     _model: string,
@@ -93,6 +102,9 @@ beforeEach(() => {
     _signal?: AbortSignal,
     _options?: unknown,
     onUsage?: (usage: TokenUsage) => void,
+    _onAlternatives?: (alternatives: ChatAlternative[]) => void,
+    _comparison?: ChatComparisonRequest,
+    _onComparisonNotice?: (notice: string) => void,
   ) => {
     onDelta("Mocked response");
     onModel?.("gpt-test");
@@ -120,9 +132,10 @@ describe("chat page", () => {
     });
     const user = userEvent.setup();
     renderChat();
-    await screen.findByText(/OpenAI ? gpt-test/);
+    await screen.findByText(/OpenAI · gpt-test/);
 
     expect(screen.getByText(/Automatic comparison is on/)).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: "Compare multiple API connections" })).toBeNull();
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Hello both");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
@@ -134,64 +147,6 @@ describe("chat page", () => {
         { connectionId: "gemini", model: "gemini-model" },
       ],
     });
-  });
-
-  it("lets users select separate respondents and a judge and inspect originals", async () => {
-    const openai: Connection = { ...connection, id: "openai", models: ["gpt-one"] };
-    const gemini: Connection = {
-      ...connection,
-      id: "gemini",
-      provider: "google",
-      providerName: "Gemini",
-      models: ["gemini-model"],
-    };
-    const judge: Connection = {
-      ...connection,
-      id: "judge",
-      provider: "groq",
-      providerName: "Groq",
-      models: ["groq-model"],
-    };
-    mocks.getConnections.mockResolvedValue({ connections: [openai, gemini, judge], activeId: judge.id });
-    mocks.streamChat.mockImplementationOnce(async (
-      _connectionId: string,
-      _model: string,
-      _messages: unknown[],
-      onDelta: (delta: string) => void,
-      _onModel?: (model: string) => void,
-      _signal?: AbortSignal,
-      _options?: unknown,
-      _onUsage?: (usage: TokenUsage) => void,
-      onAlternatives?: (alternatives: ChatAlternative[]) => void,
-      _comparison?: ChatComparisonRequest,
-    ) => {
-      onAlternatives?.([
-        { providerName: "OpenAI", model: "gpt-one", content: "OpenAI original" },
-        { providerName: "Gemini", model: "gemini-model", content: "Gemini original" },
-      ]);
-      onDelta("Groq final answer");
-    });
-    const user = userEvent.setup();
-    renderChat();
-    await screen.findByText(/Groq ? groq-model/);
-    await user.click(screen.getByText("More options"));
-    await user.click(screen.getByRole("checkbox", { name: "Enable multi-provider comparison" }));
-    await user.type(screen.getByRole("textbox", { name: "Message" }), "Hello everyone");
-    await user.click(screen.getByRole("button", { name: "Send" }));
-
-    expect(await screen.findByText("Groq final answer")).toBeTruthy();
-    expect(mocks.streamChat.mock.calls[0]?.[9]).toEqual({
-      mode: "custom",
-      candidates: [
-        { connectionId: "openai", model: "gpt-one" },
-        { connectionId: "gemini", model: "gemini-model" },
-      ],
-    });
-    await user.click(screen.getByText("View 2 provider responses"));
-    await user.click(screen.getByText("OpenAI ? gpt-one"));
-    expect(screen.getByText("OpenAI original")).toBeTruthy();
-    await user.click(screen.getByText("Gemini ? gemini-model"));
-    expect(screen.getByText("Gemini original")).toBeTruthy();
   });
 
   it("sends a message and stores the streamed model and usage", async () => {
@@ -210,6 +165,298 @@ describe("chat page", () => {
       usage: { input: 4, output: 2 },
     });
     expect(screen.getByText("Response complete")).toBeTruthy();
+  });
+
+  it("translates a response into a selected language and can restore the original", async () => {
+    const user = userEvent.setup();
+    setupStore([existingConversation()]);
+    renderChat();
+    await screen.findByText("Previous answer");
+
+    await user.click(screen.getByRole("button", { name: "Translate response" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Translation language" }), "French");
+    await user.click(screen.getByRole("button", { name: "Translate" }));
+
+    expect(await screen.findByText("Mocked response")).toBeTruthy();
+    expect(mocks.streamChat).toHaveBeenCalledTimes(1);
+    expect(mocks.streamChat.mock.calls[0]?.[0]).toBe(connection.id);
+    expect(mocks.streamChat.mock.calls[0]?.[1]).toBe("gpt-test");
+    expect(mocks.streamChat.mock.calls[0]?.[2]).toEqual([{ role: "user", content: "Previous answer" }]);
+    expect(mocks.streamChat.mock.calls[0]?.[6]).toMatchObject({
+      systemPrompt: expect.stringContaining("French"),
+    });
+
+    await user.click(screen.getByRole("button", { name: "Undo translation" }));
+    expect(await screen.findByText("Previous answer")).toBeTruthy();
+    expect(screen.queryByText("Mocked response")).toBeNull();
+  });
+
+  it("compares selected API responses with the active connection and shows the originals", async () => {
+    const judge: Connection = {
+      ...connection,
+      id: "judge",
+      provider: "groq",
+      providerName: "Groq",
+      keyHint: "********0003",
+      models: ["groq-model"],
+    };
+    const openai: Connection = {
+      ...connection,
+      id: "openai",
+      keyHint: "********0001",
+      models: ["gpt-one"],
+    };
+    const gemini: Connection = {
+      ...connection,
+      id: "gemini",
+      provider: "google",
+      providerName: "Gemini",
+      keyHint: "********0002",
+      models: ["gemini-model"],
+    };
+    mocks.getConnections.mockResolvedValue({
+      connections: [openai, gemini, judge],
+      activeId: judge.id,
+    });
+    mocks.streamChat.mockImplementationOnce(async (
+      _connectionId: string,
+      _model: string,
+      _messages: unknown[],
+      onDelta: (delta: string) => void,
+      onModel?: (model: string) => void,
+      _signal?: AbortSignal,
+      _options?: unknown,
+      onUsage?: (usage: TokenUsage) => void,
+      onAlternatives?: (alternatives: ChatAlternative[]) => void,
+      _comparison?: ChatComparisonRequest,
+      onComparisonNotice?: (notice: string) => void,
+    ) => {
+      onAlternatives?.([
+        { providerName: "OpenAI", model: "gpt-one", content: "OpenAI response" },
+        { providerName: "Gemini", model: "gemini-model", content: "Gemini response" },
+      ]);
+      onComparisonNotice?.("One respondent was unavailable.");
+      onDelta("Groq synthesis");
+      onModel?.("groq-model");
+      onUsage?.({ input: 6, output: 3 });
+    });
+    const user = userEvent.setup();
+    renderChat();
+    await screen.findByText(/Groq · groq-model/);
+    await user.click(screen.getByText("More options"));
+    await user.click(screen.getByRole("checkbox", { name: "Enable multi-provider comparison" }));
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Hello everyone");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Groq synthesis")).toBeTruthy();
+    expect(screen.getByText("One respondent was unavailable.")).toBeTruthy();
+    expect(mocks.streamChat.mock.calls[0]?.[0]).toBe("judge");
+    expect(mocks.streamChat.mock.calls[0]?.[1]).toBe("groq-model");
+    expect(mocks.streamChat.mock.calls[0]?.[9]).toEqual({
+      mode: "custom",
+      candidates: [
+        { connectionId: "openai", model: "gpt-one" },
+        { connectionId: "gemini", model: "gemini-model" },
+      ],
+    });
+    await user.click(screen.getByText("View 2 provider responses"));
+    await user.click(screen.getByText("OpenAI · gpt-one"));
+    expect(screen.getByText("OpenAI response")).toBeTruthy();
+    await user.click(screen.getByText("Gemini · gemini-model"));
+    expect(screen.getByText("Gemini response")).toBeTruthy();
+
+    const openaiSection = screen.getByText("OpenAI response").closest("section");
+    if (!openaiSection) throw new Error("OpenAI response section was not rendered.");
+    await user.click(within(openaiSection).getByRole("button", { name: "Translate response" }));
+    await user.click(screen.getByRole("button", { name: "Translate" }));
+    expect(await screen.findByText("Mocked response")).toBeTruthy();
+    expect(mocks.streamChat.mock.calls[1]?.[2]).toEqual([{ role: "user", content: "OpenAI response" }]);
+    await user.click(screen.getByRole("button", { name: "Undo translation" }));
+    expect(screen.getByText("OpenAI response")).toBeTruthy();
+  });
+
+  it("attaches any number of text and binary files and sends them as text", async () => {
+    const user = userEvent.setup();
+    const { container } = renderChat();
+    await screen.findByText(/OpenAI · gpt-test/);
+
+    await user.click(screen.getByRole("button", { name: "Attach" }));
+    expect(await screen.findByRole("button", { name: "Choose files" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Choose folder" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Choose files" }));
+    expect(screen.queryByRole("button", { name: "Choose files" })).toBeNull();
+    const contents = Array.from({ length: 20 }, (_, index) => `Notes ${index}`);
+    const textFiles = contents.map((content, index) => new File(
+      [content],
+      index === 0 ? "Pasted text #1.txt" : `notes-${index}.txt`,
+      { type: "text/plain" },
+    ));
+    const binaryFile = new File([new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00])], "archive.zip", {
+      type: "application/zip",
+    });
+    const files = [...textFiles, binaryFile];
+    const textContent = contents.map((content, index) => {
+      const name = index === 0 ? "Pasted text #1.txt" : `notes-${index}.txt`;
+      return `\n\n--- Attached file: ${name} ---\n${content}\n--- End attached file ---`;
+    }).join("");
+    const expectedContent = [
+      `Summarize this${textContent}`,
+      "\n\n--- Attached file: archive.zip ---",
+      "\nBinary file converted to base64 text.",
+      "\nOriginal file: archive.zip",
+      "\nMIME type: application/zip",
+      "\nEncoding: base64",
+      "\n\nUEsDBAA=",
+      "\n--- End attached file ---",
+    ].join("");
+    await user.upload(container.querySelector<HTMLInputElement>('input[aria-label="Choose files to attach"]')!, files);
+    expect(await screen.findByText("Pasted text #1.txt")).toBeTruthy();
+    expect(screen.getByText("archive.zip")).toBeTruthy();
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Summarize this");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Mocked response")).toBeTruthy();
+    expect(mocks.streamChat.mock.calls[0]?.[2]).toEqual([{ role: "user", content: expectedContent }]);
+    expect(useAppStore.getState().conversations[0]?.messages[0]?.attachments).toHaveLength(21);
+    expect(useAppStore.getState().conversations[0]?.messages[0]?.attachments?.[0]).toMatchObject({
+      name: "Pasted text #1.txt",
+      content: "Notes 0",
+    });
+    expect(useAppStore.getState().conversations[0]?.messages[0]?.attachments?.[20]).toMatchObject({
+      name: "archive.zip",
+      content: expect.stringContaining("UEsDBAA="),
+    });
+    await user.click(await screen.findByRole("button", { name: "Regenerate" }));
+    expect(await screen.findByText("Mocked response")).toBeTruthy();
+    expect(mocks.streamChat).toHaveBeenCalledTimes(2);
+    expect(mocks.streamChat.mock.calls[1]?.[2]).toEqual([{ role: "user", content: expectedContent }]);
+  });
+
+  it("extracts OCR text from an attached image before sending it to the API", async () => {
+    const user = userEvent.setup();
+    const { container } = renderChat();
+    await screen.findByText(/OpenAI · gpt-test/);
+
+    await user.click(screen.getByRole("button", { name: "Attach" }));
+    await user.click(await screen.findByRole("button", { name: "Choose files" }));
+    const image = new File(["photo data"], "receipt.jpg", { type: "image/jpeg" });
+    await user.upload(
+      container.querySelector<HTMLInputElement>('input[aria-label="Choose files to attach"]')!,
+      image,
+    );
+
+    expect(await screen.findByText("OCR text")).toBeTruthy();
+    expect(mocks.createOcrWorker).toHaveBeenCalledWith(
+      "eng",
+      undefined,
+      expect.objectContaining({
+        workerPath: "/ocr-assets/worker.min.js",
+        corePath: "/ocr-assets",
+        workerBlobURL: false,
+      }),
+    );
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Read this photo");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Mocked response")).toBeTruthy();
+    expect(mocks.streamChat.mock.calls[0]?.[2]).toEqual([{
+      role: "user",
+      content: [
+        "Read this photo",
+        "",
+        "--- Attached file: receipt.jpg ---",
+        "OCR text (English):",
+        "Recognized image text",
+        "--- End attached file ---",
+      ].join("\n"),
+    }]);
+    expect(useAppStore.getState().conversations[0]?.messages[0]?.attachments).toEqual([
+      expect.objectContaining({
+        name: "receipt.jpg",
+        type: "image/jpeg",
+        content: "OCR text (English):\nRecognized image text",
+      }),
+    ]);
+  });
+
+  it("serializes a selected folder as text for the chat API", async () => {
+    const user = userEvent.setup();
+    const { container } = renderChat();
+    await screen.findByText(/OpenAI · gpt-test/);
+
+    const sourceFile = new File(["export const answer = 42;"], "index.ts", { type: "text/plain" });
+    Object.defineProperty(sourceFile, "webkitRelativePath", { value: "project/src/index.ts" });
+    const readmeFile = new File(["Project notes"], "README.md", { type: "text/markdown" });
+    Object.defineProperty(readmeFile, "webkitRelativePath", { value: "project/README.md" });
+    const imageFile = new File(["image data"], "logo.png", { type: "image/png" });
+    Object.defineProperty(imageFile, "webkitRelativePath", { value: "project/assets/logo.png" });
+
+    await user.click(screen.getByRole("button", { name: "Attach" }));
+    expect(await screen.findByRole("button", { name: "Choose folder" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Choose folder" }));
+    const folderInput = container.querySelector<HTMLInputElement>('input[aria-label="Choose folder to attach"]')!;
+    await user.upload(folderInput, [sourceFile, readmeFile, imageFile]);
+
+    expect(await screen.findByText("project.txt")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Mocked response")).toBeTruthy();
+    expect(mocks.streamChat.mock.calls[0]?.[2]).toEqual([{
+      role: "user",
+      content: [
+        "Please review the attached files.",
+        "",
+        "--- Attached file: project.txt ---",
+        "--- assets/logo.png ---",
+        "OCR text (English):",
+        "Recognized image text",
+        "--- End assets/logo.png ---",
+        "",
+        "--- README.md ---",
+        "Project notes",
+        "--- End README.md ---",
+        "",
+        "--- src/index.ts ---",
+        "export const answer = 42;",
+        "--- End src/index.ts ---",
+        "--- End attached file ---",
+      ].join("\n"),
+    }]);
+    expect(useAppStore.getState().conversations[0]?.messages[0]?.attachments).toEqual([
+      expect.objectContaining({
+        name: "project.txt",
+        type: "text/plain",
+        content: [
+          "--- assets/logo.png ---",
+          "OCR text (English):",
+          "Recognized image text",
+          "--- End assets/logo.png ---",
+          "",
+          "--- README.md ---",
+          "Project notes",
+          "--- End README.md ---",
+          "",
+          "--- src/index.ts ---",
+          "export const answer = 42;",
+          "--- End src/index.ts ---",
+        ].join("\n"),
+      }),
+    ]);
+  });
+
+  it("reports when converted attachment text exceeds the API limit instead of truncating it", async () => {
+    const user = userEvent.setup();
+    const { container } = renderChat();
+    await screen.findByText(/OpenAI · gpt-test/);
+
+    const oversizedFile = new File(["x".repeat(180_001)], "large.txt", { type: "text/plain" });
+    await user.upload(
+      container.querySelector<HTMLInputElement>('input[aria-label="Choose files to attach"]')!,
+      oversizedFile,
+    );
+
+    expect((await screen.findByRole("alert")).textContent).toContain("exceeds the supported chat text size");
+    expect(mocks.streamChat).not.toHaveBeenCalled();
   });
 
   it("stops an active stream and offers retry after a provider failure", async () => {
