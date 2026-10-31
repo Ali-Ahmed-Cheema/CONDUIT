@@ -17,7 +17,7 @@ corepack pnpm dev
 
 Open the Vite URL printed in the terminal (normally `http://localhost:5173`). The dev command starts both the chat UI and the local API service. Use `corepack pnpm dev:web` and `corepack pnpm dev:api` to run them separately.
 
-The chat app's navigation menu includes **Credential reference** for the all-types catalog and session-only forms. Use **API Config** to add provider keys for actual conversations. The standalone reference UI is also available with `corepack pnpm dev:reference` (normally `http://localhost:5174`).
+The chat app's navigation menu includes **Prompt library** with 50 searchable, categorized starters you can copy into a conversation, plus **Credential reference** for the all-types catalog and session-only forms. Use **API Config** to add provider keys for actual conversations. The standalone reference UI is also available with `corepack pnpm dev:reference` (normally `http://localhost:5174`).
 
 ## Set up chat
 

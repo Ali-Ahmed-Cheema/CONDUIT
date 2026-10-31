@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { GlassTabBar, HelpButton, type GlassTab } from "@conduit/ui";
 import { useAppStore } from "../store";
+import { PromptLibrary } from "./PromptLibrary";
 
 interface HeaderProps {
   title: string;
@@ -71,6 +72,7 @@ export function Header({ title, showBack = false }: HeaderProps) {
         {menuOpen && (
           <div className="more-menu glass" id="more-navigation">
             <Link to="/getting-started" onClick={() => setMenuOpen(false)}><BookOpen size={20} />Getting started</Link>
+            <PromptLibrary />
             <Link to="/about" onClick={() => setMenuOpen(false)}><Info size={20} />About</Link>
             <Link to="/credentials" onClick={() => setMenuOpen(false)}><KeyRound size={20} />Credential reference</Link>
           </div>
