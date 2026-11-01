@@ -11,7 +11,7 @@ const executionPolicy =
 function actionForLanguage(language: string | undefined): CodeAction | null {
   const normalized = language?.toLowerCase().replace(/^language-/, "");
   if (normalized === "js" || normalized === "javascript") return "run";
-  if (normalized === "html" || normalized === "htm" || normalized === "css") return "preview";
+  if (normalized === "html" || normalized === "htm" || normalized === "css" || normalized === "svg") return "preview";
   return null;
 }
 
@@ -74,7 +74,7 @@ export function CodePreview({ code, language }: { code: string; language?: strin
   const title = action === "run" ? "JavaScript output" : `${normalized?.toUpperCase()} preview`;
 
   return (
-    <>
+    <div className="code-preview-widget">
       <button
         type="button"
         className="code-action-button"
@@ -96,6 +96,6 @@ export function CodePreview({ code, language }: { code: string; language?: strin
           />
         </div>
       )}
-    </>
+    </div>
   );
 }

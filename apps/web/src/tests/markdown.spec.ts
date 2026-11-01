@@ -134,7 +134,7 @@ const answer = 42;
     ]);
   });
 
-  it("adds a Run action for JavaScript and preview actions for HTML and CSS", () => {
+  it("adds a Run action for JavaScript and preview actions for HTML, CSS, and SVG", () => {
     const javascript = renderToStaticMarkup(
       createElement(CodePreview, { code: 'console.log("Hello world");', language: "javascript" }),
     );
@@ -167,20 +167,29 @@ const answer = 42;
     expect(document).toContain("connect-src 'none'");
   });
 
-  it("opens HTML and CSS previews from their code blocks", async () => {
+  it("opens HTML, CSS, SVG, and JavaScript previews from their code blocks", async () => {
     render(createElement(MarkdownContent, {
-      content: "```javascript\nconsole.log('Hello');\n```\n\n```html\n<h1>Hello</h1>\n```\n\n```css\nh1 { color: red; }\n```",
+      content: "```javascript\nconsole.log('Hello');\n```\n\n```html\n<h1>Hello</h1>\n```\n\n```css\nh1 { color: red; }\n```\n\n```svg\n<svg xmlns=\"http://www.w3.org/2000/svg\"><circle cx=\"5\" cy=\"5\" r=\"5\" /></svg>\n```",
       onCopyError: () => {},
     }));
 
     await screen.getByRole("button", { name: "Run JavaScript code" }).click();
-    expect(screen.getByTitle("JavaScript output").getAttribute("srcdoc")).toContain("console.log('Hello');");
+    const javascriptOutput = screen.getByTitle("JavaScript output");
+    expect(javascriptOutput.getAttribute("srcdoc")).toContain("console.log('Hello');");
+    expect(javascriptOutput.closest(".code-preview-widget")).not.toBeNull();
 
     await screen.getByRole("button", { name: "Preview HTML code" }).click();
-    expect(screen.getByTitle("HTML preview").getAttribute("srcdoc")).toContain("<h1>Hello</h1>");
+    const htmlPreview = screen.getByTitle("HTML preview");
+    expect(htmlPreview.getAttribute("srcdoc")).toContain("<h1>Hello</h1>");
+    expect(htmlPreview.closest(".code-preview-widget")).not.toBeNull();
 
     await screen.getByRole("button", { name: "Preview CSS code" }).click();
-    expect(screen.getByTitle("CSS preview").getAttribute("srcdoc")).toContain("h1 { color: red; }");
+    const cssPreview = screen.getByTitle("CSS preview");
+    expect(cssPreview.getAttribute("srcdoc")).toContain("h1 { color: red; }");
+    expect(cssPreview.closest(".code-preview-widget")).not.toBeNull();
+
+    await screen.getByRole("button", { name: "Preview SVG code" }).click();
+    expect(screen.getByTitle("SVG preview").getAttribute("srcdoc")).toContain("<circle");
   });
 
   it("does not offer an action for languages without a local runtime", () => {

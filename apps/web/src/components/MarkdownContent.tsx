@@ -194,9 +194,9 @@ export function MarkdownContent({
                   <span className="visually-hidden">ZIP</span>
                 </button>
               )}
-              <CodePreview code={code} language={language} />
             </div>
           </div>
+          <CodePreview code={code} language={language} />
           <pre><code className={codeProps?.className}>{codeProps?.children ?? children}</code></pre>
         </div>
       );
