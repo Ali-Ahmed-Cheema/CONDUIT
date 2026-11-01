@@ -37,6 +37,7 @@ import { Link } from "react-router-dom";
 import { MAX_CHAT_HISTORY_CHARACTERS } from "@conduit/core";
 import type { ChatAttachment } from "@conduit/core";
 import { ApiRequestError, getConnections, limitChatHistory, streamChat } from "../api";
+import { BrandLogo } from "../components/BrandLogo";
 import { GitHubRepositoryPicker } from "../components/GitHubRepositoryPicker";
 import { GENUI_SYSTEM_PROMPT } from "../components/GenerativeUI";
 import { MarkdownContent } from "../components/MarkdownContent";
@@ -1010,9 +1011,8 @@ export function ChatPage() {
       )}
       <aside id="chat-sidebar" className="chat-sidebar" aria-label="Main sidebar">
         <div className="chat-sidebar-header">
-          <Link to="/" className="chat-sidebar-brand" aria-label="Conduit home">
-            <span className="conduit-asterisk" aria-hidden="true">✳</span>
-            <span>Conduit</span>
+          <Link to="/" className="chat-sidebar-brand" aria-label="CONDUIT home">
+            <BrandLogo className="chat-sidebar-brand-mark" />
           </Link>
           <button
             type="button"

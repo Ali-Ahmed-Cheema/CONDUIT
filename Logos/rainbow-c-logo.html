@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rainbow C logo – reusable CSS component</title>
+
+<!-- Optional: heavy font for the “C”. Falls back to Arial Black if offline. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&display=swap" rel="stylesheet">
+
+<style>
+/* =========================================================
+   LOGO COMPONENT  (copy this block into your project)
+   Resize with one variable:  style="--size: 64px"
+   ========================================================= */
+.logo {
+  /* size: any CSS length (px, rem, vw, clamp(...)) */
+  --size: 120px;
+
+  /* palette */
+  --logo-red:     #FF3B30;
+  --logo-orange:  #FF9500;
+  --logo-yellow:  #FFD60A;
+  --logo-green:   #2EE66B;
+  --logo-cyan:    #00D1FF;
+  --logo-violet:  #A855F7;
+  --logo-magenta: #FF2D9B;
+  --logo-white:   #FFFFFF;
+  --logo-ink:     #000000;
+
+  /* derived measurements (all scale with --size) */
+  --band: calc(var(--size) * 0.0625);          /* width of each colour ring */
+  --edge: max(1px, calc(var(--size) * 0.004)); /* thin black outline */
+  --disc: calc(var(--size) * 0.26);            /* magenta disc behind the C */
+
+  /* optional fine-tuning for the letter */
+  --c-nudge-y: 0px;
+  --c-stretch: 1.12;
+
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  box-sizing: border-box;
+  vertical-align: middle;
+  background: var(--logo-violet);               /* centre disc */
+
+  /* rings: first shadow paints on top */
+  box-shadow:
+    inset 0 0 0 var(--edge)            var(--logo-ink),
+    inset 0 0 0 var(--band)            var(--logo-red),
+    inset 0 0 0 calc(var(--band) * 2)  var(--logo-orange),
+    inset 0 0 0 calc(var(--band) * 3)  var(--logo-yellow),
+    inset 0 0 0 calc(var(--band) * 4)  var(--logo-green),
+    inset 0 0 0 calc(var(--band) * 5)  var(--logo-cyan);
+}
+
+.logo::before {                                /* magenta disc */
+  content: "";
+  grid-area: 1 / 1;
+  width: var(--disc);
+  height: var(--disc);
+  border-radius: 50%;
+  background: var(--logo-magenta);
+}
+
+.logo__c {
+  position: relative;
+  bottom: 0.5px;
+  grid-area: 1 / 1;
+  font-family: "Archivo Black", "Arial Black", "Helvetica Neue", Arial, sans-serif;
+  font-weight: 900;
+  font-size: calc(var(--size) * 0.300);
+  line-height: 1;
+  color: var(--logo-white);
+  user-select: none;
+  transform: translateY(var(--c-nudge-y)) scaleX(var(--c-stretch));
+}
+
+/* size presets (optional) */
+.logo--xs { --size: 24px; }
+.logo--sm { --size: 48px; }
+.logo--md { --size: 96px; }
+.logo--lg { --size: 160px; }
+.logo--xl { --size: 256px; }
+
+/* =========================================================
+   DEMO PAGE STYLES (not part of the component)
+   ========================================================= */
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 2rem 1.25rem 3rem;
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #1c1c1e;
+  background: #f5f5f7;
+}
+main { max-width: 56rem; margin: 0 auto; }
+h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+p.lead { margin: 0 0 1.5rem; color: #555; max-width: 60ch; }
+.panel {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem;
+  padding: 1.5rem; border-radius: 12px; margin-bottom: 1rem;
+}
+.panel--light { background: #fff; }
+.panel--dark  { background: #16161a; }
+.panel--brand { background: linear-gradient(135deg, #1c1c1e, #3a2a6a); }
+.hero { display: flex; justify-content: center; padding: 1.5rem; }
+pre {
+  margin: 0; padding: 1rem 1.25rem; overflow-x: auto;
+  background: #16161a; color: #e8e8ee; border-radius: 12px;
+  font: 13px/1.6 ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+h2 { font-size: 1.05rem; margin: 2rem 0 .75rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Rainbow C logo</h1>
+  <p class="lead">One reusable component. Change <code>--size</code> and everything — rings, outline and letter — scales with it.</p>
+
+  <div class="panel panel--light hero">
+    <div class="logo logo--xl" role="img" aria-label="C logo"><span class="logo__c" aria-hidden="true">C</span></div>
+  </div>
+
+  <h2>Presets</h2>
+  <div class="panel panel--light">
+    <div class="logo logo--xs" role="img" aria-label="C logo"><span class="logo__c" aria-hidden="true">C</span></div>
+    <div class="logo logo--sm" role="img" aria-label="C logo"><span class="logo__c" aria-hidden="true">C</span></div>
+    <div class="logo logo--md" role="img" aria-label="C logo"><span class="logo__c" aria-hidden="true">C</span></div>
+    <div class="logo logo--lg" role="img" aria-label="C logo"><span class="logo__c" aria-hidden="true">C</span></div>
+  </div>
+
+  <h2>Any size, any background</h2>
+  <div class="panel panel--dark">
+    <div class="logo" style="--size: 32px" role="img" aria-label="C logo"><span class="logo__c" aria-hidden="true">C</span></div>
+    <div class="logo" style="--size: 72px" role="img" aria-label="C logo"><span class="logo__c" aria-hidden="true">C</span></div>
+    <div class="logo" style="--size: 5rem" role="img" aria-label="C logo"><span class="logo__c" aria-hidden="true">C</span></div>
+    <div class="logo" style="--size: clamp(60px, 12vw, 140px)" role="img" aria-label="C logo"><span class="logo__c" aria-hidden="true">C</span></div>
+  </div>
+  <div class="panel panel--brand">
+    <div class="logo" style="--size: 56px" role="img" aria-label="C logo"><span class="logo__c" aria-hidden="true">C</span></div>
+    <div class="logo" style="--size: 112px" role="img" aria-label="C logo"><span class="logo__c" aria-hidden="true">C</span></div>
+  </div>
+
+  <h2>Usage</h2>
+<pre>&lt;div class="logo" style="--size: 64px" role="img" aria-label="C logo"&gt;
+  &lt;span class="logo__c" aria-hidden="true"&gt;C&lt;/span&gt;
+&lt;/div&gt;
+
+/* or use a preset: .logo--xs  .logo--sm  .logo--md  .logo--lg  .logo--xl */
+/* recolor: .my-theme { --logo-red: #e11d48; } */</pre>
+</main>
+</body>
+</html>

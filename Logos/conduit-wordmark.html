@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CONDUIT wordmark – reusable component</title>
+
+<style>
+/* =========================================================
+   WORDMARK COMPONENT  (copy this block into your project)
+   Resize with one variable:  style="--width: 320px"
+   ========================================================= */
+.wordmark {
+  /* size: any CSS length (px, rem, vw, %, clamp(...)); height follows automatically */
+  --width: 480px;
+
+  /* palette */
+  --wm-red:     #FF3B30;
+  --wm-orange:  #FF9500;
+  --wm-yellow:  #FFD60A;
+  --wm-green:   #2EE66B;
+  --wm-cyan:    #00D1FF;
+  --wm-violet:  #A855F7;
+  --wm-magenta: #FF2D9B;
+  --wm-ink:     #000000;
+
+  display: inline-block;
+  vertical-align: middle;
+  width: var(--width);
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 1914 / 335;
+  overflow: visible;
+}
+
+/* shared letter style: thick black outline, sharp corners */
+.wm-letter {
+  stroke: var(--wm-ink, #000);
+  stroke-width: 8;
+  stroke-linejoin: miter;
+  stroke-miterlimit: 8;
+}
+
+/* one colour per letter */
+.wm-c { fill: var(--wm-red,     #FF3B30); }
+.wm-o { fill: var(--wm-orange,  #FF9500); }
+.wm-n { fill: var(--wm-yellow,  #FFD60A); }
+.wm-d { fill: var(--wm-green,   #2EE66B); }
+.wm-u { fill: var(--wm-cyan,    #00D1FF); }
+.wm-i { fill: var(--wm-violet,  #A855F7); }
+.wm-t { fill: var(--wm-magenta, #FF2D9B); }
+
+/* size presets (optional) */
+.wordmark--xs { --width: 96px; }
+.wordmark--sm { --width: 160px; }
+.wordmark--md { --width: 320px; }
+.wordmark--lg { --width: 640px; }
+.wordmark--xl { --width: 960px; }
+
+/* =========================================================
+   DEMO PAGE STYLES (not part of the component)
+   ========================================================= */
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 2rem 1.25rem 3rem;
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #1c1c1e;
+  background: #f5f5f7;
+}
+main { max-width: 60rem; margin: 0 auto; }
+h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.05rem; margin: 2rem 0 .75rem; }
+p.lead { margin: 0 0 1.5rem; color: #555; max-width: 60ch; }
+.panel {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem 2rem;
+  padding: 1.5rem; border-radius: 12px; margin-bottom: 1rem;
+}
+.panel--light { background: #fff; }
+.panel--dark  { background: #16161a; }
+.panel--brand { background: linear-gradient(135deg, #1c1c1e, #3a2a6a); }
+.hero { justify-content: center; padding: 2.5rem 1.5rem; }
+pre {
+  margin: 0; padding: 1rem 1.25rem; overflow-x: auto;
+  background: #16161a; color: #e8e8ee; border-radius: 12px;
+  font: 13px/1.6 ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+</style>
+</head>
+<body>
+
+<!-- ===== Shared shapes: put this ONCE per page, then reuse with <use> ===== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="conduit-wordmark" viewBox="0 0 1914 335">
+    <g transform="translate(-6 -10)">
+      <!-- C -->
+      <path class="wm-letter wm-c" d="M58 14 L168 14 L216 64 L216 123 L170 123 L170 86 L148 61 L78 61 L56 83 L56 274 L78 296 L148 296 L170 274 L170 232 L216 232 L216 292 L168 341 L58 341 L10 292 L10 64 Z"/>
+      <!-- O -->
+      <path class="wm-letter wm-o" fill-rule="evenodd" d="M320 14 L440 14 L490 64 L490 292 L440 341 L320 341 L270 292 L270 64 Z M340 61 L421 61 L443 83 L443 274 L421 296 L340 296 L318 274 L318 83 Z"/>
+      <!-- N -->
+      <path class="wm-letter wm-n" d="M552 14 L650 14 L768 262 L768 58 L735 58 L735 14 L846 14 L846 58 L818 58 L818 341 L750 341 L630 72 L630 298 L664 298 L664 341 L552 341 L552 298 L586 298 L586 58 L552 58 Z"/>
+      <!-- D -->
+      <path class="wm-letter wm-d" fill-rule="evenodd" d="M904 14 L1092 14 L1142 64 L1142 292 L1092 341 L904 341 L904 298 L938 298 L938 58 L904 58 Z M982 61 L1072 61 L1094 83 L1094 274 L1072 296 L982 296 Z"/>
+      <!-- U -->
+      <path class="wm-letter wm-u" d="M1198 14 L1302 14 L1302 58 L1272 58 L1272 274 L1294 296 L1372 296 L1394 274 L1394 58 L1358 58 L1358 14 L1466 14 L1466 58 L1440 58 L1440 292 L1392 341 L1274 341 L1228 292 L1228 58 L1198 58 Z"/>
+      <!-- I -->
+      <path class="wm-letter wm-i" d="M1518 14 L1640 14 L1640 58 L1600 58 L1600 298 L1640 298 L1640 341 L1518 341 L1518 298 L1558 298 L1558 58 L1518 58 Z"/>
+      <!-- T -->
+      <path class="wm-letter wm-t" d="M1672 14 L1916 14 L1916 104 L1868 104 L1868 58 L1814 58 L1814 298 L1860 298 L1860 341 L1724 341 L1724 298 L1772 298 L1772 58 L1712 58 L1712 104 L1672 104 Z"/>
+    </g>
+  </symbol>
+</svg>
+
+<main>
+  <h1>CONDUIT wordmark</h1>
+  <p class="lead">One reusable component. Change <code>--width</code> and the whole wordmark scales, outline included.</p>
+
+  <div class="panel panel--light hero">
+    <svg class="wordmark wordmark--lg" viewBox="0 0 1914 335" role="img" aria-label="CONDUIT"><use href="#conduit-wordmark"/></svg>
+  </div>
+
+  <h2>Presets</h2>
+  <div class="panel panel--light">
+    <svg class="wordmark wordmark--xs" viewBox="0 0 1914 335" role="img" aria-label="CONDUIT"><use href="#conduit-wordmark"/></svg>
+    <svg class="wordmark wordmark--sm" viewBox="0 0 1914 335" role="img" aria-label="CONDUIT"><use href="#conduit-wordmark"/></svg>
+    <svg class="wordmark wordmark--md" viewBox="0 0 1914 335" role="img" aria-label="CONDUIT"><use href="#conduit-wordmark"/></svg>
+  </div>
+
+  <h2>Any size, any background</h2>
+  <div class="panel panel--dark">
+    <svg class="wordmark" style="--width: 140px" viewBox="0 0 1914 335" role="img" aria-label="CONDUIT"><use href="#conduit-wordmark"/></svg>
+    <svg class="wordmark" style="--width: 260px" viewBox="0 0 1914 335" role="img" aria-label="CONDUIT"><use href="#conduit-wordmark"/></svg>
+    <svg class="wordmark" style="--width: clamp(180px, 40vw, 420px)" viewBox="0 0 1914 335" role="img" aria-label="CONDUIT"><use href="#conduit-wordmark"/></svg>
+  </div>
+  <div class="panel panel--brand">
+    <svg class="wordmark" style="--width: 220px" viewBox="0 0 1914 335" role="img" aria-label="CONDUIT"><use href="#conduit-wordmark"/></svg>
+    <svg class="wordmark" style="--width: 380px" viewBox="0 0 1914 335" role="img" aria-label="CONDUIT"><use href="#conduit-wordmark"/></svg>
+  </div>
+
+  <h2>Usage</h2>
+<pre>&lt;!-- 1. once per page: the shared &lt;svg&gt;&lt;symbol id="conduit-wordmark"&gt;…&lt;/symbol&gt;&lt;/svg&gt; block --&gt;
+
+&lt;!-- 2. anywhere, any number of times --&gt;
+&lt;svg class="wordmark" style="--width: 240px" viewBox="0 0 1914 335"
+     role="img" aria-label="CONDUIT"&gt;
+  &lt;use href="#conduit-wordmark"/&gt;
+&lt;/svg&gt;
+
+/* presets: .wordmark--xs  --sm  --md  --lg  --xl */
+/* recolor: .my-theme { --wm-red: #e11d48; --wm-ink: #222; } */</pre>
+</main>
+</body>
+</html>
