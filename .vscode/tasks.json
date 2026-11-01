@@ -1,0 +1,14 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "CONDUIT: Run Development Servers",
+      "type": "shell",
+      "command": "corepack",
+      "args": ["pnpm", "dev"],
+      "isBackground": true,
+      "problemMatcher": [],
+      "group": "build"
+    }
+  ]
+}
