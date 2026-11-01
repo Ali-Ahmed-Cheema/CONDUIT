@@ -27,6 +27,26 @@ describe("chat Markdown rendering", () => {
     expect(markup).toContain('aria-label="Copy table"');
   });
 
+  it("renders hexadecimal colors as swatches in message text but not code", () => {
+    const { container } = render(createElement(MarkdownContent, {
+      content: "Try #FF3B30, #abc, #1234, and #11223344; keep `#00FF00` and:\n\n```css\n#0000FF\n```",
+      onCopyError: () => {},
+    }));
+
+    const swatches = container.querySelectorAll(".markdown-color-swatch");
+    expect(swatches).toHaveLength(4);
+    expect(Array.from(swatches, (swatch) => swatch.textContent)).toEqual([
+      "#FF3B30",
+      "#abc",
+      "#1234",
+      "#11223344",
+    ]);
+    expect(container.querySelector<HTMLElement>(".markdown-color-swatch-chip")?.style.backgroundColor)
+      .toBe("rgb(255, 59, 48)");
+    expect(container.querySelector(".inline-code-wrap code")?.textContent).toBe("#00FF00");
+    expect(container.querySelector(".code-block pre code")?.textContent).toBe("#0000FF\n");
+  });
+
   it("formats copied table rows as spreadsheet-friendly tab-separated text", () => {
     expect(formatTableAsTsv([
       ["Name", "Details"],

@@ -592,6 +592,22 @@ textarea {
   position: relative;
 }
 
+.markdown-color-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  white-space: nowrap;
+}
+
+.markdown-color-swatch-chip {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  border: 1px solid var(--bd);
+  border-radius: 3px;
+  vertical-align: -0.08em;
+}
+
 .markdown :not(pre) > .inline-code-wrap > code {
   border: 1px solid var(--bd);
   border-radius: 4px;

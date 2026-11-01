@@ -22,6 +22,63 @@ function getTextContent(children: ReactNode): string {
     .join("");
 }
 
+type MarkdownTree = { children?: unknown[] };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function remarkColorSwatches() {
+  return (tree: MarkdownTree) => {
+    const replaceText = (content: string) => {
+      const colorPattern = /(^|[^0-9A-Za-z#])(#[\da-fA-F]{8}|#[\da-fA-F]{6}|#[\da-fA-F]{4}|#[\da-fA-F]{3})(?![0-9A-Za-z])/g;
+      const replacements: Record<string, unknown>[] = [];
+      let lastIndex = 0;
+
+      for (const match of content.matchAll(colorPattern)) {
+        const color = match[2];
+        const colorStart = match.index! + match[1].length;
+        if (colorStart > lastIndex) {
+          replacements.push({ type: "text", value: content.slice(lastIndex, colorStart) });
+        }
+        replacements.push({
+          type: "colorSwatch",
+          data: { hName: "span", hProperties: { className: ["markdown-color-swatch"] } },
+          children: [{ type: "text", value: color }],
+        });
+        lastIndex = colorStart + color.length;
+      }
+
+      if (lastIndex === 0) return null;
+      if (lastIndex < content.length) {
+        replacements.push({ type: "text", value: content.slice(lastIndex) });
+      }
+      return replacements;
+    };
+
+    const visit = (node: unknown) => {
+      if (!isRecord(node) || !Array.isArray(node.children)) return;
+      const children: unknown[] = [];
+      let changed = false;
+      for (const child of node.children) {
+        if (isRecord(child) && child.type === "text" && typeof child.value === "string") {
+          const replacements = replaceText(child.value);
+          if (replacements) {
+            children.push(...replacements);
+            changed = true;
+            continue;
+          }
+        }
+        visit(child);
+        children.push(child);
+      }
+      if (changed) node.children = children;
+    };
+
+    for (const child of tree.children ?? []) visit(child);
+  };
+}
+
 function renderChoiceList(children: ReactNode, onAction?: (prompt: string) => void): ReactNode | null {
   if (!onAction) return null;
   const items = Children.toArray(children).filter(
@@ -156,6 +213,18 @@ export function MarkdownContent({
         </a>
       );
     },
+    span({ children, className, ...props }) {
+      if (className?.split(/\s+/).includes("markdown-color-swatch")) {
+        const color = getTextContent(children);
+        return (
+          <span className="markdown-color-swatch">
+            <span className="markdown-color-swatch-chip" style={{ backgroundColor: color }} aria-hidden="true" />
+            <code>{color}</code>
+          </span>
+        );
+      }
+      return <span {...props} className={className}>{children}</span>;
+    },
     table({ children }) {
       return <TableWithCopy onCopyError={onCopyError}>{children}</TableWithCopy>;
     },
@@ -257,7 +326,7 @@ export function MarkdownContent({
   return (
     <div className="markdown">
       {downloadFailed && <p role="alert">Could not download the generated file.</p>}
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkColorSwatches]} components={components}>
         {content}
       </ReactMarkdown>
     </div>
