@@ -22,6 +22,40 @@ function getTextContent(children: ReactNode): string {
     .join("");
 }
 
+function renderChoiceList(children: ReactNode, onAction?: (prompt: string) => void): ReactNode | null {
+  if (!onAction) return null;
+  const items = Children.toArray(children).filter(
+    (item) => typeof item !== "string" || item.trim().length > 0,
+  );
+  const choices = items.map((item) => {
+    if (!isValidElement<{ children?: ReactNode }>(item)) return null;
+    const text = getTextContent(item.props.children).replace(/\s+/g, " ").trim();
+    const match = /^(?:\(([A-H])\)|([A-H])[.)]|([A-H])\s*[-:])\s+(.+)$/i.exec(text);
+    if (!match) return null;
+    return { label: (match[1] ?? match[2] ?? match[3]).toUpperCase(), text: match[4] };
+  });
+  if (choices.length < 2 || choices.some((choice) => !choice)) return null;
+
+  return (
+    <div className="genui-choice-list markdown-choice-list" role="group" aria-label="Choose an answer">
+      {choices.map((choice) => choice && (
+        <button
+          type="button"
+          className="genui-choice-button"
+          key={choice.label}
+          aria-label={`Choose option ${choice.label}: ${choice.text}`}
+          onClick={() => onAction(
+            `I choose option ${choice.label}: ${choice.text} for the multiple-choice question in your previous response. Please tell me if it is correct and explain why.`,
+          )}
+        >
+          <span className="genui-choice-letter" aria-hidden="true">{choice.label}</span>
+          <span>{choice.text}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function formatTableAsTsv(rows: Iterable<Iterable<string>>): string {
   return Array.from(rows, (row) =>
     Array.from(row, (cell) => cell.replace(/\s+/g, " ").trim()).join("\t"),
@@ -124,6 +158,12 @@ export function MarkdownContent({
     },
     table({ children }) {
       return <TableWithCopy onCopyError={onCopyError}>{children}</TableWithCopy>;
+    },
+    ol({ children, node: _node }) {
+      return renderChoiceList(children, onAction) ?? <ol>{children}</ol>;
+    },
+    ul({ children, node: _node }) {
+      return renderChoiceList(children, onAction) ?? <ul>{children}</ul>;
     },
     pre({ children }) {
       const codeElement = Children.toArray(children).find((child) =>

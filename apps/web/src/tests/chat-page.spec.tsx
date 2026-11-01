@@ -267,6 +267,40 @@ describe("chat page", () => {
     expect(screen.getByText("Response complete")).toBeTruthy();
   });
 
+  it("sends a selected generated quiz answer as the next chat message", async () => {
+    const user = userEvent.setup();
+    const quizResponse = `\`\`\`genui
+${JSON.stringify({
+  type: "quiz",
+  title: "Quick quiz",
+  questions: [{ question: "Which planet is known as the Red Planet?", options: ["Venus", "Mars"] }],
+})}
+\`\`\``;
+    const conversation = existingConversation();
+    conversation.messages[1] = {
+      id: "assistant-1",
+      role: "assistant",
+      content: quizResponse,
+      ts: 2,
+      model: "gpt-test",
+    };
+    setupStore([conversation]);
+    renderChat();
+    await screen.findByRole("button", { name: /Choose model\. Current: OpenAI · gpt-test/ });
+
+    await user.click(await screen.findByRole("button", { name: "Choose option B: Mars" }));
+
+    expect(await screen.findByText("Mocked response")).toBeTruthy();
+    expect(mocks.streamChat.mock.calls[0]?.[2]).toEqual([
+      { role: "user", content: "Original question" },
+      { role: "assistant", content: quizResponse },
+      {
+        role: "user",
+        content: 'My answer for "Which planet is known as the Red Planet?" is option B: Mars. Please tell me if it is correct and explain why.',
+      },
+    ]);
+  });
+
   it("uses a saved API key when no key is active", async () => {
     mocks.getConnections.mockResolvedValue({ connections: [connection], activeId: null });
     useAppStore.setState({ activeConnectionId: null, activeModel: "" });

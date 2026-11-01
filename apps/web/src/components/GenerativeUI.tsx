@@ -13,6 +13,7 @@ type ChoiceField = {
 
 type GenUIComponent =
   | { type: "card"; title: string; description?: string; content?: string }
+  | { type: "quiz"; title: string; questions: Array<{ question: string; options: string[] }> }
   | { type: "metric"; label: string; value: string | number; detail?: string }
   | { type: "table"; title?: string; columns: string[]; rows: Array<Array<string | number>> }
   | { type: "chart"; title: string; labels: string[]; values: number[] }
@@ -73,6 +74,20 @@ function isGenUIComponent(value: unknown): value is GenUIComponent {
       return isText(value.title) && !!value.title &&
         (value.description === undefined || isText(value.description)) &&
         (value.content === undefined || isText(value.content));
+    case "quiz":
+      return isText(value.title) && !!value.title &&
+        Array.isArray(value.questions) &&
+        value.questions.length > 0 &&
+        value.questions.length <= 20 &&
+        value.questions.every((question) =>
+          isRecord(question) &&
+          isText(question.question) &&
+          !!question.question.trim() &&
+          isTextList(question.options) &&
+          question.options.length >= 2 &&
+          question.options.length <= 6 &&
+          question.options.every((option) => option.trim().length > 0),
+        );
     case "metric":
       return isText(value.label) && !!value.label &&
         (isText(value.value) || isFiniteNumber(value.value)) &&
@@ -155,6 +170,7 @@ export function parseGenUI(content: string): GenUIComponent[] | null {
 
 export const GENUI_SYSTEM_PROMPT = `When a response would benefit from an interactive interface, include a fenced \`\`\`genui JSON block. Use only this safe declarative format; never include HTML, JavaScript, or executable code in it. The block may contain one component, an array of components, or {"type":"ui","components":[...]}. Supported components:
 - {"type":"card","title":"...","description":"...","content":"..."}
+- {"type":"quiz","title":"...","questions":[{"question":"...","options":["...","...","...","..."]}]} (clickable multiple-choice questions; selecting an option sends the answer for feedback)
 - {"type":"metric","label":"...","value":42,"detail":"..."}
 - {"type":"table","title":"...","columns":["..."],"rows":[["..."]]}
 - {"type":"chart","title":"...","labels":["..."],"values":[1,2]} (bar chart)
@@ -163,7 +179,7 @@ export const GENUI_SYSTEM_PROMPT = `When a response would benefit from an intera
 - {"type":"button","label":"...","prompt":"..."} (sends the prompt to the conversation)
 - {"type":"image","src":"https://...","alt":"...","title":"..."}
 - {"type":"map","title":"...","location":"..."}
-Keep the normal text answer useful on its own, and include a GenUI block only when it adds value.`;
+Keep the normal text answer useful on its own, and include a GenUI block only when it adds value. When the user asks for MCQs, a quiz, or practice questions, prefer a quiz component with 2–6 options per question. Do not mark or reveal the correct answers unless requested. Keep any brief introduction useful on its own.`;
 
 function getDefaultValue(field: ChoiceField): string | boolean {
   if (field.type === "checkbox") return typeof field.value === "boolean" ? field.value : false;
@@ -173,6 +189,49 @@ function getDefaultValue(field: ChoiceField): string | boolean {
   }
   if (typeof field.value === "string") return field.value;
   return field.options?.[0] ?? "";
+}
+
+function InteractiveQuiz({
+  component,
+  onAction,
+}: {
+  component: Extract<GenUIComponent, { type: "quiz" }>;
+  onAction?: (prompt: string) => void;
+}) {
+  const [answers, setAnswers] = useState<Record<number, number>>({});
+
+  return (
+    <section className="genui-card genui-quiz" aria-label={component.title}>
+      <h3>{component.title}</h3>
+      {component.questions.map((question, questionIndex) => (
+        <div className="genui-question" key={`${question.question}-${questionIndex}`}>
+          <h4>{questionIndex + 1}. {question.question}</h4>
+          <div className="genui-choice-list" role="group" aria-label={`Answers for question ${questionIndex + 1}`}>
+            {question.options.map((option, optionIndex) => {
+              const letter = String.fromCharCode(65 + optionIndex);
+              return (
+                <button
+                  type="button"
+                  className="genui-choice-button"
+                  key={`${letter}-${option}`}
+                  aria-label={`Choose option ${letter}: ${option}`}
+                  aria-pressed={answers[questionIndex] === optionIndex}
+                  disabled={!onAction}
+                  onClick={() => {
+                    setAnswers((current) => ({ ...current, [questionIndex]: optionIndex }));
+                    onAction?.(`My answer for "${question.question}" is option ${letter}: ${option}. Please tell me if it is correct and explain why.`);
+                  }}
+                >
+                  <span className="genui-choice-letter" aria-hidden="true">{letter}</span>
+                  <span>{option}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </section>
+  );
 }
 
 function InteractiveFields({
@@ -315,6 +374,8 @@ export function GenerativeUI({
                 {component.content && <p>{component.content}</p>}
               </section>
             );
+          case "quiz":
+            return <InteractiveQuiz component={component} onAction={onAction} key={`${component.type}-${index}`} />;
           case "metric":
             return (
               <section className="genui-card genui-metric" key={`${component.type}-${index}`}>

@@ -929,6 +929,77 @@ textarea {
   align-self: start;
 }
 
+.genui-quiz {
+  grid-column: 1 / -1;
+}
+
+.genui-question + .genui-question {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--bd);
+}
+
+.genui-question h4 {
+  margin: 0 0 10px;
+  font-size: 0.94rem;
+  line-height: 1.45;
+}
+
+.genui-choice-list {
+  display: grid;
+  gap: 8px;
+}
+
+.markdown-choice-list {
+  margin: 0.5em 0;
+}
+
+.genui-choice-button {
+  display: grid;
+  width: 100%;
+  min-height: 44px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--bd);
+  border-radius: 10px;
+  background: var(--gl);
+  color: var(--fg);
+  font: inherit;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.genui-choice-button:hover:not(:disabled),
+.genui-choice-button[aria-pressed="true"] {
+  border-color: var(--ac, #5474d3);
+}
+
+.genui-choice-button:focus-visible {
+  outline: 2px solid var(--ac, #5474d3);
+  outline-offset: 2px;
+}
+
+.genui-choice-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.genui-choice-letter {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid var(--bd);
+  border-radius: 50%;
+  color: var(--mut);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
 .genui-result {
   display: flex;
   align-items: baseline;

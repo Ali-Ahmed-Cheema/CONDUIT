@@ -74,6 +74,48 @@ describe("chat Markdown rendering", () => {
     expect(screen.queryByRole("button", { name: "Download genui" })).toBeNull();
   });
 
+  it("renders generated multiple-choice questions as selectable answer buttons", async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn();
+    const content = `\`\`\`genui
+${JSON.stringify({
+  type: "quiz",
+  title: "Science quiz",
+  questions: [
+    { question: "Which planet is known as the Red Planet?", options: ["Venus", "Mars"] },
+    { question: "What do plants absorb?", options: ["Oxygen", "Carbon dioxide"] },
+  ],
+})}
+\`\`\``;
+    render(createElement(MarkdownContent, { content, onCopyError: () => {}, onAction }));
+
+    await user.click(screen.getByRole("button", { name: "Choose option B: Mars" }));
+
+    expect(onAction).toHaveBeenCalledWith(
+      'My answer for "Which planet is known as the Red Planet?" is option B: Mars. Please tell me if it is correct and explain why.',
+    );
+    expect(screen.getByRole("button", { name: "Choose option B: Mars" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("heading", { name: "2. What do plants absorb?" })).toBeTruthy();
+  });
+
+  it("turns lettered Markdown answer lists into chat actions and leaves other lists alone", async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn();
+    render(createElement(MarkdownContent, {
+      content: "Choose an answer:\n\n- A) The first choice\n- B) The second choice\n\nOther items:\n\n- Apples\n- Oranges",
+      onCopyError: () => {},
+      onAction,
+    }));
+
+    await user.click(screen.getByRole("button", { name: "Choose option B: The second choice" }));
+
+    expect(onAction).toHaveBeenCalledWith(
+      "I choose option B: The second choice for the multiple-choice question in your previous response. Please tell me if it is correct and explain why.",
+    );
+    expect(screen.getByText("Apples").closest("li")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Apples/ })).toBeNull();
+  });
+
   it("submits generated form values as a follow-up chat action", async () => {
     const user = userEvent.setup();
     const onAction = vi.fn();
@@ -144,10 +186,14 @@ const answer = 42;
     const css = renderToStaticMarkup(
       createElement(CodePreview, { code: "h1 { color: red; }", language: "css" }),
     );
+    const svg = renderToStaticMarkup(
+      createElement(CodePreview, { code: '<svg xmlns="http://www.w3.org/2000/svg"></svg>', language: "svg" }),
+    );
 
     expect(javascript).toContain('aria-label="Run JavaScript code"');
     expect(html).toContain('aria-label="Preview HTML code"');
     expect(css).toContain('aria-label="Preview CSS code"');
+    expect(svg).toContain('aria-label="Preview SVG code"');
   });
 
   it("prepares JavaScript output and blocks network access", () => {
