@@ -19,9 +19,6 @@ importers:
       express:
         specifier: ^5.3.0
         version: 5.3.0
-      fflate:
-        specifier: ^0.8.3
-        version: 0.8.3
       hash-wasm:
         specifier: ^4.12.0
         version: 4.12.0
@@ -182,6 +179,9 @@ importers:
       express:
         specifier: ^5.3.0
         version: 5.3.0
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       hash-wasm:
         specifier: ^4.12.0
         version: 4.12.0
@@ -209,6 +209,9 @@ importers:
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1
+      tesseract.js:
+        specifier: 6.0.1
+        version: 6.0.1(encoding@0.1.14)
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
@@ -3536,6 +3539,12 @@ packages:
         integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==,
       }
 
+  bmp-js@0.1.0:
+    resolution:
+      {
+        integrity: sha512-vHdS19CnY3hwiNdkaqk93DvjVLfbEcI8mys4UjuWrlX1haDmroo8o4xCzh4wD6DGV6HxRCyauwhHRqMTfERtjw==,
+      }
+
   body-parser@2.4.0:
     resolution:
       {
@@ -4866,6 +4875,12 @@ packages:
       }
     engines: { node: ">=0.10.0" }
 
+  idb-keyval@6.3.0:
+    resolution:
+      {
+        integrity: sha512-um+2dgAWmYsu615EXpWVwSmapJhON0G43t3Ka/EVaohzPQXSMqKEqeDK/oIW3Ow+BXaF2PvSc+oBTFp793A5Ow==,
+      }
+
   idb@7.1.1:
     resolution:
       {
@@ -5207,6 +5222,12 @@ packages:
         integrity: sha512-p3EcsicXjit7SaskXHs1hA91QxgTw46Fv6EFKKGS5DRFLD8yKnohjF3hxoju94b/OcMZoQukzpPpBE9uLVKzgQ==,
       }
     engines: { node: ">= 0.4" }
+
+  is-url@1.2.4:
+    resolution:
+      {
+        integrity: sha512-ITvGim8FhRiYe4IQ5uHSkj7pVaPDrCTkNd3yq3cV7iZAcJdHTUMPMEHcqSOy9xZ9qFenQCvi+2wjH9a1nXqHww==,
+      }
 
   is-weakmap@2.0.2:
     resolution:
@@ -6109,6 +6130,18 @@ packages:
       }
     engines: { node: ">=10" }
 
+  node-fetch@2.7.0:
+    resolution:
+      {
+        integrity: sha512-c4FRfUm/dbcWZ7U+1Wq0AwCyFL+3nt2bEw05wfxSz+DWpWsitgmSgYmy2dQdWyKC1694ELPqMs/YzUSNozLt8A==,
+      }
+    engines: { node: 4.x || >=6.0.0 }
+    peerDependencies:
+      encoding: ^0.1.0
+    peerDependenciesMeta:
+      encoding:
+        optional: true
+
   node-gyp@11.5.0:
     resolution:
       {
@@ -6194,6 +6227,13 @@ packages:
       {
         integrity: sha512-gyyil3DweqhXiEhTqtAs9wwRLfWHmetwhI4kmM5Rn0d6gtmK863Ki7qqbQnp9+Wwlqoe3B1LFWj7kMp5ctE4rQ==,
       }
+
+  opencollective-postinstall@2.0.3:
+    resolution:
+      {
+        integrity: sha512-8AV/sCtuzUeTo8gQK5qDZzARrulB3egtLzFgteqB2tcT4Mw7B8Kt7JcDHmltjz6FOAHsvTevk70gZEbhM4ZS9Q==,
+      }
+    hasBin: true
 
   optionator@0.9.4:
     resolution:
@@ -6595,6 +6635,12 @@ packages:
     resolution:
       {
         integrity: sha512-1s+CxXjJ71i7LNVy8nYwg47XV4y6lAnOEhsMtSKq3WpmPfhl9LuKlTqKIn/3yUpE8lBz+W+TT88Bxyhnr0U4yw==,
+      }
+
+  regenerator-runtime@0.13.11:
+    resolution:
+      {
+        integrity: sha512-kY1AZVr2Ra+t+piVaJ4gxaFaReZVH40AKNo7UCX6W+dEwBo/2oZJzqfuN1qLq1oL45o56cPaTXELwrTh8Fpggg==,
       }
 
   regexp.prototype.flags@1.5.4:
@@ -7250,6 +7296,18 @@ packages:
     engines: { node: ">=10" }
     hasBin: true
 
+  tesseract.js-core@6.1.2:
+    resolution:
+      {
+        integrity: sha512-pv4GjmramjdObhDyR1q85Td8X60Puu/lGQn7Kw2id05LLgHhAcWgnz6xSdMCSxBMWjQDmMyDXPTC2aqADdpiow==,
+      }
+
+  tesseract.js@6.0.1:
+    resolution:
+      {
+        integrity: sha512-/sPvMvrCtgxnNRCjbTYbr7BRu0yfWDsMZQ2a/T5aN/L1t8wUQN6tTWv6p6FwzpoEBA0jrN2UD2SX4QQFRdoDbA==,
+      }
+
   tinybench@2.9.0:
     resolution:
       {
@@ -7303,6 +7361,12 @@ packages:
         integrity: sha512-exgYmnmL/sJpR3upZfXG5PoatXQii55xAiXGXzY+sROLZ/Y+SLcp9PgJNI9Vz37HpQ74WvDcLT8eqm+kV3FzrA==,
       }
     engines: { node: ">=16" }
+
+  tr46@0.0.3:
+    resolution:
+      {
+        integrity: sha512-N3WMsuqV66lT30CrXNbEjx4GEwlow3v6rr4mCcv6prnfwhS01rkgyFdjPNBYd9br7LpXV1+Emh01fHnq2Gdgrw==,
+      }
 
   tr46@7.0.0:
     resolution:
@@ -7734,6 +7798,18 @@ packages:
       }
     engines: { node: ^22.22.2 || ^24.15.0 || >=26.0.0 }
 
+  wasm-feature-detect@1.9.0:
+    resolution:
+      {
+        integrity: sha512-zonE+xlIIYtxPy++L24ow0hAD8CICb4+FgPyROd3buyXIqsJvUEDkBgfCCoXOd1Hu3DUr0GOfnPIdcGV+YpNaA==,
+      }
+
+  webidl-conversions@3.0.1:
+    resolution:
+      {
+        integrity: sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==,
+      }
+
   webidl-conversions@8.0.1:
     resolution:
       {
@@ -7754,6 +7830,12 @@ packages:
         integrity: sha512-KwOAJrpf+GTgBvcBQJcP38sMF0DsQKdwtG+TxM2pW44P6E5k0hDbWrDmyuJDIF0Uef0aQq0ZoJs+5oI+k8ddhg==,
       }
     engines: { node: ^22.14.0 || >=24.0.0 }
+
+  whatwg-url@5.0.0:
+    resolution:
+      {
+        integrity: sha512-saE57nupxk6v3HY35+jzBwYa0rKSy0XR8JSxZPwgLr7ys0IBzhGviA1/TUGJLmSVqs8pb9AnvICXEuOHLprYTw==,
+      }
 
   which-boxed-primitive@1.1.1:
     resolution:
@@ -8025,6 +8107,12 @@ packages:
         integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==,
       }
     engines: { node: ">=10" }
+
+  zlibjs@0.3.1:
+    resolution:
+      {
+        integrity: sha512-+J9RrgTKOmlxFSDHo0pI1xM6BLVUv+o0ZT9ANtCxGkjIVCCUdx9alUF8Gm+dGLKbkkkidWIHFDZHDMpfITt4+w==,
+      }
 
   zod@4.6.6:
     resolution:
@@ -10099,6 +10187,8 @@ snapshots:
       readable-stream: 3.6.2
     optional: true
 
+  bmp-js@0.1.0: {}
+
   body-parser@2.4.0:
     dependencies:
       bytes: 3.1.2
@@ -11017,6 +11107,8 @@ snapshots:
     dependencies:
       safer-buffer: 2.1.2
 
+  idb-keyval@6.3.0: {}
+
   idb@7.1.1: {}
 
   idb@8.0.4: {}
@@ -11187,6 +11279,8 @@ snapshots:
   is-typed-array@1.1.15:
     dependencies:
       which-typed-array: 1.1.24
+
+  is-url@1.2.4: {}
 
   is-weakmap@2.0.2: {}
 
@@ -11892,6 +11986,12 @@ snapshots:
       semver: 7.8.5
     optional: true
 
+  node-fetch@2.7.0(encoding@0.1.14):
+    dependencies:
+      whatwg-url: 5.0.0
+    optionalDependencies:
+      encoding: 0.1.14
+
   node-gyp@11.5.0:
     dependencies:
       env-paths: 2.2.1
@@ -11957,6 +12057,8 @@ snapshots:
   openapi3-ts@4.6.2:
     dependencies:
       yaml: 2.9.1
+
+  opencollective-postinstall@2.0.3: {}
 
   optionator@0.9.4:
     dependencies:
@@ -12216,6 +12318,8 @@ snapshots:
       regenerate: 1.5.0
 
   regenerate@1.5.0: {}
+
+  regenerator-runtime@0.13.11: {}
 
   regexp.prototype.flags@1.5.4:
     dependencies:
@@ -12732,6 +12836,22 @@ snapshots:
       commander: 2.20.3
       source-map-support: 0.5.21
 
+  tesseract.js-core@6.1.2: {}
+
+  tesseract.js@6.0.1(encoding@0.1.14):
+    dependencies:
+      bmp-js: 0.1.0
+      idb-keyval: 6.3.0
+      is-url: 1.2.4
+      node-fetch: 2.7.0(encoding@0.1.14)
+      opencollective-postinstall: 2.0.3
+      regenerator-runtime: 0.13.11
+      tesseract.js-core: 6.1.2
+      wasm-feature-detect: 1.9.0
+      zlibjs: 0.3.1
+    transitivePeerDependencies:
+      - encoding
+
   tinybench@2.9.0: {}
 
   tinyexec@1.3.1: {}
@@ -12754,6 +12874,8 @@ snapshots:
   tough-cookie@6.0.2:
     dependencies:
       tldts: 7.4.19
+
+  tr46@0.0.3: {}
 
   tr46@7.0.0:
     dependencies:
@@ -13019,6 +13141,10 @@ snapshots:
     dependencies:
       xml-name-validator: 5.0.0
 
+  wasm-feature-detect@1.9.0: {}
+
+  webidl-conversions@3.0.1: {}
+
   webidl-conversions@8.0.1: {}
 
   whatwg-mimetype@5.0.0: {}
@@ -13030,6 +13156,11 @@ snapshots:
       webidl-conversions: 8.0.1
     transitivePeerDependencies:
       - "@noble/hashes"
+
+  whatwg-url@5.0.0:
+    dependencies:
+      tr46: 0.0.3
+      webidl-conversions: 3.0.1
 
   which-boxed-primitive@1.1.1:
     dependencies:
@@ -13262,6 +13393,8 @@ snapshots:
       yargs-parser: 22.0.0
 
   yocto-queue@0.1.0: {}
+
+  zlibjs@0.3.1: {}
 
   zod@4.6.6: {}
 

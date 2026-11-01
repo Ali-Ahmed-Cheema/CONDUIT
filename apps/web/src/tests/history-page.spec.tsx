@@ -3,7 +3,7 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HistoryPage } from "../pages/History";
 import { useAppStore, type ChatConversation } from "../store";
 
@@ -75,5 +75,49 @@ describe("history page", () => {
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
     expect(screen.queryByText("Project notes")).toBeNull();
     expect(useAppStore.getState().activeConversationId).toBeNull();
+  });
+
+  it("exports the selected history conversation as an importable JSON file", async () => {
+    const user = userEvent.setup();
+    const blobs: Blob[] = [];
+    const downloads: string[] = [];
+    const previousCreateObjectURL = Object.getOwnPropertyDescriptor(URL, "createObjectURL");
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn((blob: Blob) => {
+        blobs.push(blob);
+        return "blob:conversation";
+      }),
+    });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      downloads.push(this.download);
+    });
+
+    try {
+      renderHistory();
+      await user.click(screen.getByRole("button", { name: "Export Project notes as JSON" }));
+
+      expect(downloads).toEqual(["Project notes.json"]);
+      expect(blobs).toHaveLength(1);
+      expect(blobs[0]?.type).toBe("application/json");
+      const reader = new FileReader();
+      const contents = new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+      });
+      reader.readAsText(blobs[0]!);
+      expect(JSON.parse(await contents)).toMatchObject({
+        id: "today",
+        title: "Project notes",
+        messages: [{ content: "Release checklist" }],
+      });
+    } finally {
+      click.mockRestore();
+      if (previousCreateObjectURL) {
+        Object.defineProperty(URL, "createObjectURL", previousCreateObjectURL);
+      } else {
+        Reflect.deleteProperty(URL, "createObjectURL");
+      }
+    }
   });
 });

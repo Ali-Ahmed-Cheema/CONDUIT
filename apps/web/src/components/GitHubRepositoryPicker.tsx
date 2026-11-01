@@ -125,6 +125,8 @@ export function GitHubRepositoryPicker({ disabled = false, onAttach }: Props) {
         type="button"
         className="github-repository-trigger"
         aria-haspopup="dialog"
+        aria-label="GitHub repository"
+        title="GitHub repository"
         onClick={() => setOpen(true)}
         disabled={disabled}
       >

@@ -122,6 +122,12 @@ export const setActiveConnection = (id: string | null) =>
     body: JSON.stringify({ id }),
   });
 
+export const setComparisonJudge = (id: string | null) =>
+  request("/api/connections/comparison-judge", ConnectionsResponseSchema, {
+    method: "PUT",
+    body: JSON.stringify({ id }),
+  });
+
 export const removeConnection = (id: string) =>
   request(`/api/connections/${encodeURIComponent(id)}`, ConnectionsResponseSchema, { method: "DELETE" });
 

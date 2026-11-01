@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { strToU8, zipSync } from "fflate";
 
 const mocks = vi.hoisted(() => ({
   addConnection: vi.fn(),
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   removeConnection: vi.fn(),
   replaceConnection: vi.fn(),
   setActiveConnection: vi.fn(),
+  setComparisonJudge: vi.fn(),
   validateKey: vi.fn(),
 }));
 
@@ -25,6 +27,7 @@ vi.mock("../api", async (importOriginal) => {
     removeConnection: mocks.removeConnection,
     replaceConnection: mocks.replaceConnection,
     setActiveConnection: mocks.setActiveConnection,
+    setComparisonJudge: mocks.setComparisonJudge,
     validateKey: mocks.validateKey,
   };
 });
@@ -52,8 +55,12 @@ const second: Connection = {
   models: ["gpt-test", "gpt-next"],
 };
 
-function response(connections: Connection[], activeId: string | null): ConnectionsResponse {
-  return { connections, activeId };
+function response(
+  connections: Connection[],
+  activeId: string | null,
+  comparisonJudgeId: string | null = null,
+): ConnectionsResponse {
+  return { connections, activeId, comparisonJudgeId };
 }
 
 function renderConfig() {
@@ -67,6 +74,7 @@ beforeEach(() => {
   mocks.removeConnection.mockReset().mockResolvedValue(response([], null));
   mocks.replaceConnection.mockReset().mockResolvedValue(response([first], first.id));
   mocks.setActiveConnection.mockReset().mockResolvedValue(response([first, second], second.id));
+  mocks.setComparisonJudge.mockReset().mockResolvedValue(response([first, second], first.id));
   mocks.validateKey.mockReset().mockResolvedValue({
     validationId: "validation",
     provider: "openai",
@@ -78,6 +86,7 @@ beforeEach(() => {
   useAppStore.setState({
     connections: [],
     activeConnectionId: null,
+    comparisonJudgeConnectionId: null,
     activeModel: "",
   });
 });
@@ -101,6 +110,21 @@ describe("API config page", () => {
     expect(mocks.addConnection).toHaveBeenCalledWith("validation");
     expect((await screen.findByRole("status")).textContent).toContain("OpenAI connection validated and saved.");
     expect(useAppStore.getState().activeConnectionId).toBe(first.id);
+  });
+
+  it("saves System or a provider key as the multi-key comparison judge", async () => {
+    const third = { ...second, id: "third", providerName: "Google Gemini" };
+    mocks.getConnections.mockResolvedValue(response([first, second, third], first.id));
+    mocks.setComparisonJudge.mockResolvedValue(response([first, second, third], first.id, second.id));
+    const user = userEvent.setup();
+    renderConfig();
+
+    await screen.findByText(/Google Gemini/);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Comparison judge" }), second.id);
+
+    expect(mocks.setComparisonJudge).toHaveBeenCalledWith(second.id);
+    expect(useAppStore.getState().comparisonJudgeConnectionId).toBe(second.id);
+    expect((await screen.findByRole("status")).textContent).toContain("OpenAI second will select the final response.");
   });
 
   it.each([
@@ -154,7 +178,7 @@ describe("API config page", () => {
     Object.defineProperty(file, "text", { value: vi.fn().mockResolvedValue("API key\nsk-first-key\nsk-second-key") });
     renderConfig();
 
-    fireEvent.change(screen.getByLabelText("Choose a CSV file"), { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText("Choose a CSV or Excel file"), { target: { files: [file] } });
     await screen.findByText("keys.csv: 2 unique keys ready to check.");
     await user.click(screen.getByRole("button", { name: "Check and add keys" }));
 
@@ -165,7 +189,7 @@ describe("API config page", () => {
       "save:validation-sk-second-key",
     ]);
     expect((await screen.findByRole("status")).textContent).toContain(
-      "CSV import complete: 2 added; 0 not added; 0 duplicates skipped; 0 skipped because the 10-connection limit was reached; 0 not checked.",
+      "API key import complete: 2 added; 0 not added; 0 duplicates skipped; 0 skipped because the 10-connection limit was reached; 0 not checked.",
     );
     expect(useAppStore.getState().activeConnectionId).toBe(first.id);
   });
@@ -176,7 +200,7 @@ describe("API config page", () => {
     Object.defineProperty(file, "text", { value: vi.fn().mockResolvedValue("key\ncustom-provider-key") });
     renderConfig();
 
-    fireEvent.change(screen.getByLabelText("Choose a CSV file"), { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText("Choose a CSV or Excel file"), { target: { files: [file] } });
     await screen.findByText("unknown.csv: 1 unique key ready to check.");
     await user.click(screen.getByRole("button", { name: "Check and add keys" }));
     expect(mocks.validateKey).not.toHaveBeenCalled();
@@ -187,6 +211,51 @@ describe("API config page", () => {
     expect(mocks.validateKey).toHaveBeenCalledWith("custom-provider-key", true);
   });
 
+  it("imports API keys from an XLSX workbook", async () => {
+    const user = userEvent.setup();
+    const steps: string[] = [];
+    mocks.validateKey.mockImplementation(async (key: string) => {
+      steps.push(`check:${key}`);
+      return {
+        validationId: `validation-${key}`,
+        provider: "openai",
+        providerName: "OpenAI",
+        models: ["gpt-test"],
+        chatModels: ["gpt-test"],
+      };
+    });
+    mocks.addConnection.mockImplementation(async (validationId: string) => {
+      steps.push(`save:${validationId}`);
+      return response([first], first.id);
+    });
+    const bytes = zipSync({
+      "xl/sharedStrings.xml": strToU8(
+        "<sst><si><t>API key</t></si><si><t>sk-first-key</t></si><si><t>sk-second-key</t></si></sst>",
+      ),
+      "xl/worksheets/sheet1.xml": strToU8(
+        '<worksheet><sheetData><row><c r="B1" t="s"><v>0</v></c></row><row><c r="B2" t="s"><v>1</v></c></row><row><c r="B3" t="s"><v>2</v></c></row></sheetData></worksheet>',
+      ),
+    });
+    const workbook = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(workbook).set(bytes);
+    const file = new File([workbook], "keys.xlsx", {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    renderConfig();
+
+    fireEvent.change(screen.getByLabelText("Choose a CSV or Excel file"), { target: { files: [file] } });
+    await screen.findByText("keys.xlsx: 2 unique keys ready to check.");
+    await user.click(screen.getByRole("button", { name: "Check and add keys" }));
+
+    expect(steps).toEqual([
+      "check:sk-first-key",
+      "save:validation-sk-first-key",
+      "check:sk-second-key",
+      "save:validation-sk-second-key",
+    ]);
+    expect((await screen.findByRole("status")).textContent).toContain("API key import complete: 2 added;");
+  });
+
   it("stops a CSV import when the provider rate limit is reached", async () => {
     const user = userEvent.setup();
     mocks.validateKey.mockRejectedValue(new ApiRequestError("Rate limited.", undefined, 429));
@@ -195,14 +264,14 @@ describe("API config page", () => {
     Object.defineProperty(file, "text", { value: vi.fn().mockResolvedValue(csv) });
     renderConfig();
 
-    fireEvent.change(screen.getByLabelText("Choose a CSV file"), { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText("Choose a CSV or Excel file"), { target: { files: [file] } });
     await screen.findByText("limited.csv: 2 unique keys ready to check.");
     await user.click(screen.getByRole("button", { name: "Check and add keys" }));
 
     expect(mocks.validateKey).toHaveBeenCalledTimes(1);
     expect(mocks.addConnection).not.toHaveBeenCalled();
     expect((await screen.findByRole("status")).textContent).toContain(
-      "CSV import complete: 0 added; 1 not added; 0 duplicates skipped; 0 skipped because the 10-connection limit was reached; 1 not checked. Provider rate limit reached",
+      "API key import complete: 0 added; 1 not added; 0 duplicates skipped; 0 skipped because the 10-connection limit was reached; 1 not checked. Provider rate limit reached",
     );
   });
 

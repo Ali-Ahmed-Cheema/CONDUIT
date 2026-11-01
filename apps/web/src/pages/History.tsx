@@ -1,10 +1,11 @@
-import { Pin, PinOff, Search, Trash2 } from "lucide-react";
+import { Download, Pin, PinOff, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "../components/Header";
 import { ImportConversationButton } from "../components/ImportConversationButton";
 import { EmptyState, GlassCard } from "@conduit/ui";
 import { groupConversations } from "../lib/group";
 import { F } from "../lib/time";
+import { downloadConversation } from "../lib/conversationExport";
 import { useAppStore } from "../store";
 
 export function HistoryPage() {
@@ -128,6 +129,14 @@ export function HistoryPage() {
                     onClick={() => updateConversation(conversation.id, (item) => ({ ...item, pinned: !item.pinned }))}
                   >
                     {conversation.pinned ? <PinOff size={16} /> : <Pin size={16} />}
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button history-export"
+                    aria-label={`Export ${conversation.title || "conversation"} as JSON`}
+                    onClick={() => downloadConversation(conversation, "json")}
+                  >
+                    <Download size={16} />
                   </button>
                   <button
                     type="button"

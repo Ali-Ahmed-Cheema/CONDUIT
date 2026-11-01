@@ -20,7 +20,11 @@ import { app } from "./index";
 
 const allowedOrigin = "http://localhost:5173";
 const secret = "sk-test-secret-1234";
-let persistedStore: { connections: StoredConnection[]; activeId: string | null } = { connections: [], activeId: null };
+let persistedStore: {
+  connections: StoredConnection[];
+  activeId: string | null;
+  comparisonJudgeId?: string | null;
+} = { connections: [], activeId: null };
 
 async function apiRequest(
   path: string,
@@ -359,7 +363,7 @@ describe("multi-provider chat comparison", () => {
     )).toBe(true);
   });
 
-  it("automatically compares both connections when exactly two are configured", async () => {
+  it("automatically compares two keys with the system judge by default", async () => {
     const makeConnection = (id: string, model: string) => ({
       id,
       provider: "openai",
@@ -374,8 +378,7 @@ describe("multi-provider chat comparison", () => {
     });
     const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
       const body = JSON.parse(String(init.body)) as { model: string; messages: Array<{ content: string }> };
-      const judging = body.messages.some((message) => message.content.includes("Compare these provider responses"));
-      const content = judging ? "Judged answer" : `${body.model} answer`;
+      const content = `${body.model} answer`;
       return Promise.resolve(new Response(
         `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`,
         { status: 200, headers: { "Content-Type": "text/event-stream" } },
@@ -397,7 +400,119 @@ describe("multi-provider chat comparison", () => {
     expect(response.status).toBe(200);
     expect(result).toContain('"providerName":"first"');
     expect(result).toContain('"providerName":"second"');
-    expect(result).toContain('"delta":"Judged answer"');
+    expect(result).toContain('"delta":"gpt-first answer"');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns the one successful response when the other saved keys fail", async () => {
+    const makeConnection = (id: string) => ({
+      id,
+      provider: "openai",
+      providerName: id,
+      keyHint: "********1234",
+      models: [`model-${id}`],
+      encryptedKey: { iv: "", tag: "", ciphertext: "" },
+    });
+    const connections = Array.from({ length: 10 }, (_, index) => makeConnection(`key-${index + 1}`));
+    readStore.mockResolvedValue({ connections, activeId: "key-1" });
+    const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as { model: string };
+      if (body.model !== "model-key-7") {
+        return Promise.resolve(new Response(JSON.stringify({ error: { message: "provider unavailable" } }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }));
+      }
+      return Promise.resolve(new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "The working key answer." } }] })}\n\ndata: [DONE]\n\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      ));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await apiRequest("/api/chat/stream", {
+      method: "POST",
+      body: {
+        connectionId: "key-1",
+        model: "model-key-1",
+        messages: [{ role: "user", content: "Give me an answer." }],
+        comparison: {
+          mode: "custom",
+          judgeMode: "system",
+          candidates: connections.map((connection) => ({
+            connectionId: connection.id,
+            model: connection.models[0] ?? "",
+          })),
+        },
+      },
+      origin: allowedOrigin,
+    });
+    const result = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(result).toContain('"delta":"The working key answer."');
+    expect(result).toContain('"providerName":"key-7"');
+    expect(result).toContain("Some provider responses were unavailable");
+    expect(fetchMock).toHaveBeenCalledTimes(10);
+  });
+
+  it("falls back to a successful respondent when the configured judge API fails", async () => {
+    const makeConnection = (id: string, model: string) => ({
+      id,
+      provider: "openai",
+      providerName: id,
+      keyHint: "********1234",
+      models: [model],
+      encryptedKey: { iv: "", tag: "", ciphertext: "" },
+    });
+    readStore.mockResolvedValue({
+      connections: [
+        makeConnection("judge", "gpt-judge"),
+        makeConnection("first", "gpt-first"),
+        makeConnection("second", "gpt-second"),
+      ],
+      activeId: "judge",
+    });
+    const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as { model: string };
+      if (body.model === "gpt-judge") {
+        return Promise.resolve(new Response(JSON.stringify({ error: { message: "invalid judge key" } }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }));
+      }
+      const content = body.model === "gpt-first"
+        ? "Plants use sunlight to make food."
+        : "Cooking recipes use ovens.";
+      return Promise.resolve(new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: [DONE]\n\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      ));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await apiRequest("/api/chat/stream", {
+      method: "POST",
+      body: {
+        connectionId: "judge",
+        model: "gpt-judge",
+        messages: [{ role: "user", content: "Explain how plants use sunlight to make food." }],
+        comparison: {
+          mode: "custom",
+          judgeMode: "provider",
+          candidates: [
+            { connectionId: "first", model: "gpt-first" },
+            { connectionId: "second", model: "gpt-second" },
+          ],
+        },
+      },
+      origin: allowedOrigin,
+    });
+    const result = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(result).toContain('"delta":"Plants use sunlight to make food."');
+    expect(result).toContain("Judge API unavailable");
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
@@ -508,6 +623,63 @@ describe("multi-provider chat comparison", () => {
     expect(result).not.toContain('"providerName":"failed"');
     expect(result).toContain('"comparisonNotice":"Some provider responses were unavailable: failed:');
     expect(result).toContain('"delta":"Judged successful answer"');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("uses the configured judge directly when every respondent API fails", async () => {
+    const makeConnection = (id: string, model: string) => ({
+      id,
+      provider: "openai",
+      providerName: id,
+      keyHint: "********1234",
+      models: [model],
+      encryptedKey: { iv: "", tag: "", ciphertext: "" },
+    });
+    readStore.mockResolvedValue({
+      connections: [
+        makeConnection("judge", "gpt-judge"),
+        makeConnection("first", "gpt-first"),
+        makeConnection("second", "gpt-second"),
+      ],
+      activeId: "judge",
+    });
+    const fetchMock = vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as { model: string };
+      if (body.model !== "gpt-judge") {
+        return Promise.resolve(new Response(JSON.stringify({ error: { message: "provider unavailable" } }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }));
+      }
+      return Promise.resolve(new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Judge direct answer." } }] })}\n\ndata: [DONE]\n\n`,
+        { status: 200, headers: { "Content-Type": "text/event-stream" } },
+      ));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await apiRequest("/api/chat/stream", {
+      method: "POST",
+      body: {
+        connectionId: "judge",
+        model: "gpt-judge",
+        messages: [{ role: "user", content: "Give me an answer." }],
+        comparison: {
+          mode: "custom",
+          judgeMode: "provider",
+          candidates: [
+            { connectionId: "first", model: "gpt-first" },
+            { connectionId: "second", model: "gpt-second" },
+          ],
+        },
+      },
+      origin: allowedOrigin,
+    });
+    const result = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(result).toContain('"delta":"Judge direct answer."');
+    expect(result).toContain("No respondent API replied; the selected judge will answer directly.");
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });
@@ -635,6 +807,58 @@ describe("saved connection status", () => {
     expect(failure).not.toContain(secret);
     expect(connectionData.connections[0]).toMatchObject({ status: "invalid", lastValidatedAt: addedAt });
     expect(connectionData.connections[0]).not.toHaveProperty("encryptedKey");
+  });
+
+  it("persists the selected comparison judge and clears it when that key is deleted", async () => {
+    persistedStore.connections = ["first", "judge", "third"].map((id) => ({
+      id,
+      provider: "openai",
+      providerName: id,
+      keyHint: "********1234",
+      models: ["gpt-test"],
+      addedAt: "2026-01-02T03:04:05.000Z",
+      encryptedKey: { iv: "", tag: "", ciphertext: "" },
+    }));
+    persistedStore.activeId = "first";
+
+    const saved = await apiRequest("/api/connections/comparison-judge", {
+      method: "PUT",
+      body: { id: "judge" },
+      origin: allowedOrigin,
+    });
+
+    expect(saved.status).toBe(200);
+    expect(persistedStore.comparisonJudgeId).toBe("judge");
+    expect(await saved.json()).toMatchObject({ comparisonJudgeId: "judge" });
+
+    const deleted = await apiRequest("/api/connections/judge", {
+      method: "DELETE",
+      origin: allowedOrigin,
+    });
+
+    expect(deleted.status).toBe(200);
+    expect(persistedStore.comparisonJudgeId).toBeNull();
+  });
+
+  it("requires three saved keys before assigning a provider comparison judge", async () => {
+    persistedStore.connections = [{
+      id: "first",
+      provider: "openai",
+      providerName: "first",
+      keyHint: "********1234",
+      models: ["gpt-test"],
+      addedAt: "2026-01-02T03:04:05.000Z",
+      encryptedKey: { iv: "", tag: "", ciphertext: "" },
+    }];
+
+    const response = await apiRequest("/api/connections/comparison-judge", {
+      method: "PUT",
+      body: { id: "first" },
+      origin: allowedOrigin,
+    });
+
+    expect(response.status).toBe(400);
+    expect(persistedStore.comparisonJudgeId).toBeUndefined();
   });
 });
 

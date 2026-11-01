@@ -8,6 +8,7 @@ import {
   refreshConnection,
   replaceConnection,
   setActiveConnection,
+  setComparisonJudge,
   validateKey,
 } from "../api";
 import { Header } from "../components/Header";
@@ -15,6 +16,7 @@ import { GlassCard } from "@conduit/ui";
 import type { ConnectionsResponse, ProviderId } from "../types";
 import { useAppStore } from "../store";
 import { parseApiKeyCsv } from "../lib/apiKeyCsv";
+import { parseApiKeyXlsx } from "../lib/apiKeyXlsx";
 
 const detectProvider = (key: string): ProviderId | undefined => {
   if (key.startsWith("AIza")) return "google";
@@ -40,8 +42,10 @@ export function ApiConfigPage() {
   const connections = useAppStore((state) => state.connections);
   const setConnections = useAppStore((state) => state.setConnections);
   const activeConnectionId = useAppStore((state) => state.activeConnectionId);
+  const comparisonJudgeId = useAppStore((state) => state.comparisonJudgeConnectionId);
   const activeModel = useAppStore((state) => state.activeModel);
   const setActiveConnectionId = useAppStore((state) => state.setActiveConnectionId);
+  const setComparisonJudgeConnectionId = useAppStore((state) => state.setComparisonJudgeConnectionId);
   const setActiveModel = useAppStore((state) => state.setActiveModel);
   const [draft, setDraft] = useState("");
   const [allowUnknownProbe, setAllowUnknownProbe] = useState(false);
@@ -62,6 +66,7 @@ export function ApiConfigPage() {
         if (cancelled) return;
         setConnections(result.connections);
         setActiveConnectionId(result.activeId);
+        setComparisonJudgeConnectionId(result.comparisonJudgeId ?? null);
         const active = result.connections.find((connection) => connection.id === result.activeId);
         if (active && !active.models.includes(useAppStore.getState().activeModel)) {
           setActiveModel(active.models[0] ?? "");
@@ -76,7 +81,7 @@ export function ApiConfigPage() {
     return () => {
       cancelled = true;
     };
-  }, [setActiveConnectionId, setActiveModel, setConnections]);
+  }, [setActiveConnectionId, setActiveModel, setComparisonJudgeConnectionId, setConnections]);
 
   const submitKey = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -110,6 +115,7 @@ export function ApiConfigPage() {
       }
       setConnections(result.connections);
       setActiveConnectionId(result.activeId);
+      setComparisonJudgeConnectionId(result.comparisonJudgeId ?? null);
       const active = result.connections.find((connection) => connection.id === result.activeId);
       setActiveModel(active?.models[0] ?? "");
       setStatusMessage(active ? `${active.providerName} connection validated and saved.` : "Connection saved.");
@@ -123,7 +129,7 @@ export function ApiConfigPage() {
     }
   };
 
-  const selectCsvFile = async (event: ChangeEvent<HTMLInputElement>) => {
+  const selectKeyFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
     if (!file) return;
@@ -134,14 +140,21 @@ export function ApiConfigPage() {
     setBulkFileName("");
     setBulkDuplicateCount(0);
     setBulkAllowUnknownProbe(false);
+    const extension = file.name.match(/\.[^.]+$/)?.[0].toLowerCase();
+    if (extension !== ".csv" && extension !== ".xlsx") {
+      setError("Choose a CSV or XLSX file.");
+      return;
+    }
     if (file.size > 1_000_000) {
-      setError("Choose a CSV file smaller than 1 MB.");
+      setError("Choose a CSV or XLSX file smaller than 1 MB.");
       return;
     }
 
     setBusy(true);
     try {
-      const parsed = parseApiKeyCsv(await file.text());
+      const parsed = extension === ".xlsx"
+        ? await parseApiKeyXlsx(new Uint8Array(await file.arrayBuffer()), file.name)
+        : parseApiKeyCsv(await file.text());
       setBulkKeys(parsed.keys);
       setBulkFileName(file.name);
       setBulkDuplicateCount(parsed.duplicateCount);
@@ -149,7 +162,7 @@ export function ApiConfigPage() {
         `Found ${parsed.keys.length} unique API key${parsed.keys.length === 1 ? "" : "s"}${parsed.duplicateCount ? `; ${parsed.duplicateCount} duplicate${parsed.duplicateCount === 1 ? "" : "s"} will be skipped` : ""}.`,
       );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not read the CSV file.");
+      setError(reason instanceof Error ? reason.message : "Could not read the CSV or XLSX file.");
     } finally {
       setBusy(false);
     }
@@ -199,6 +212,7 @@ export function ApiConfigPage() {
 
           setConnections(result.connections);
           setActiveConnectionId(result.activeId);
+          setComparisonJudgeConnectionId(result.comparisonJudgeId ?? null);
           const active = result.connections.find((connection) => connection.id === result.activeId);
           setActiveModel(active?.models[0] ?? "");
           savedCount += 1;
@@ -212,7 +226,7 @@ export function ApiConfigPage() {
         }
 
         attemptedCount += 1;
-        setStatusMessage(`Checking CSV keys: ${attemptedCount}/${keysToImport.length} checked · ${savedCount} added · ${failedCount} not added.`);
+        setStatusMessage(`Checking API keys: ${attemptedCount}/${keysToImport.length} checked · ${savedCount} added · ${failedCount} not added.`);
         if (stopReason) break;
       }
 
@@ -225,7 +239,7 @@ export function ApiConfigPage() {
         `${notCheckedCount} not checked`,
       ];
       setStatusMessage(
-        `CSV import complete: ${summary.join("; ")}${stopReason === "rate-limit"
+        `API key import complete: ${summary.join("; ")}${stopReason === "rate-limit"
           ? ". Provider rate limit reached; wait before trying the remaining keys."
           : stopReason === "provider-error"
             ? ". A provider or network error stopped the import; try the remaining keys later."
@@ -247,6 +261,7 @@ export function ApiConfigPage() {
       const result = await setActiveConnection(id);
       setConnections(result.connections);
       setActiveConnectionId(result.activeId);
+      setComparisonJudgeConnectionId(result.comparisonJudgeId ?? null);
       const active = result.connections.find((connection) => connection.id === result.activeId);
       setActiveModel(active?.models[0] ?? "");
       setStatusMessage(active ? `${active.providerName} is now active.` : "No connection is active.");
@@ -266,6 +281,7 @@ export function ApiConfigPage() {
       const result = await removeConnection(id);
       setConnections(result.connections);
       setActiveConnectionId(result.activeId);
+      setComparisonJudgeConnectionId(result.comparisonJudgeId ?? null);
       const active = result.connections.find((connection) => connection.id === result.activeId);
       setActiveModel(active?.models[0] ?? "");
       setStatusMessage("API connection deleted.");
@@ -284,6 +300,7 @@ export function ApiConfigPage() {
       const result = await refreshConnection(id);
       setConnections(result.connections);
       setActiveConnectionId(result.activeId);
+      setComparisonJudgeConnectionId(result.comparisonJudgeId ?? null);
       const active = result.connections.find((connection) => connection.id === result.activeId);
       if (active && !active.models.includes(activeModel)) setActiveModel(active.models[0] ?? "");
       const refreshed = result.connections.find((connection) => connection.id === id);
@@ -306,6 +323,25 @@ export function ApiConfigPage() {
         }
       }
       setError(reason instanceof Error ? reason.message : "Could not refresh this API connection.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const chooseComparisonJudge = async (id: string | null) => {
+    setBusy(true);
+    setError("");
+    setStatusMessage("");
+    try {
+      const result = await setComparisonJudge(id);
+      setConnections(result.connections);
+      setComparisonJudgeConnectionId(result.comparisonJudgeId ?? null);
+      const judge = result.connections.find((connection) => connection.id === result.comparisonJudgeId);
+      setStatusMessage(judge
+        ? `${judge.providerName} will select the final response.`
+        : "System will select the closest successful response.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not save the comparison judge.");
     } finally {
       setBusy(false);
     }
@@ -375,18 +411,18 @@ export function ApiConfigPage() {
             I consent to sending this key to supported AI providers to identify it.
           </label>
         )}
-        <section className="key-card glass" aria-labelledby="csv-import-heading">
-          <h2 id="csv-import-heading">Import API keys from CSV</h2>
+        <section className="key-card glass" aria-labelledby="key-import-heading">
+          <h2 id="key-import-heading">Import API keys from CSV or Excel</h2>
           <p className="page-description">
-            Export your Excel sheet as a CSV with one API key per row, or include an “API key” column. Keys are checked one at a time; no chat messages are sent.
+            Upload a CSV or XLSX workbook with one API key per row, or include an “API key” column. Keys are checked one at a time; no chat messages are sent.
           </p>
           <label>
-            Choose a CSV file
+            Choose a CSV or Excel file
             <input
               type="file"
-              accept=".csv,text/csv"
-              aria-label="Import API keys from CSV"
-              onChange={(event) => void selectCsvFile(event)}
+              accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              aria-label="Import API keys from CSV or Excel"
+              onChange={(event) => void selectKeyFile(event)}
               disabled={busy || loading}
             />
           </label>
@@ -409,6 +445,32 @@ export function ApiConfigPage() {
           )}
         </section>
         <p className="counter">({connections.length}/10 saved)</p>
+        <section className="key-card glass" aria-labelledby="comparison-judge-heading">
+          <h2 id="comparison-judge-heading">Response selection</h2>
+          <p className="page-description">
+            When multiple API keys are saved, CONDUIT sends your message to each available key and uses successful replies.
+            Choose whether the system or an API key selects the final response.
+          </p>
+          <label>
+            Comparison judge
+            <select
+              aria-label="Comparison judge"
+              value={comparisonJudgeId ?? ""}
+              onChange={(event) => void chooseComparisonJudge(event.target.value || null)}
+              disabled={busy || loading || connections.length < 3}
+            >
+              <option value="">System (select the closest successful response)</option>
+              {connections.length >= 3 && connections.map((connection) => (
+                <option value={connection.id} key={connection.id}>
+                  {connection.providerName} · {connection.keyHint}
+                </option>
+              ))}
+            </select>
+          </label>
+          {connections.length < 3 && (
+            <p className="page-description">An API key can be the judge when at least three keys are saved, leaving two or more keys to respond.</p>
+          )}
+        </section>
         {error && <p className="error-alert" role="alert">{error}</p>}
         {statusMessage && <p className="success-alert" role="status">{statusMessage}</p>}
 

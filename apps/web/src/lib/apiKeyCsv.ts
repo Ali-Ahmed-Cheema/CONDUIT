@@ -65,16 +65,14 @@ function normalizeHeader(value: string): string {
 
 const apiKeyHeaders = new Set(["apikey", "key", "token", "accesstoken", "apitoken"]);
 
-export function parseApiKeyCsv(csv: string): { keys: string[]; duplicateCount: number } {
-  const contents = csv.replace(/^\uFEFF/, "");
-  const rows = parseCsvRows(contents, detectDelimiter(contents));
+export function parseApiKeyRows(rows: string[][], format: "CSV" | "XLSX"): { keys: string[]; duplicateCount: number } {
   while (rows.length > 0 && rows[rows.length - 1].every((cell) => cell.trim() === "")) rows.pop();
-  if (rows.length === 0) throw new Error("The CSV file is empty.");
+  if (rows.length === 0) throw new Error(`The ${format} file is empty.`);
 
   const headerIndex = rows[0].findIndex((cell) => apiKeyHeaders.has(normalizeHeader(cell)));
   const hasHeader = headerIndex >= 0;
   if (!hasHeader && rows[0].length > 1) {
-    throw new Error('Add a column named "API key" or "key" to CSV files with multiple columns.');
+    throw new Error(`Add a column named "API key" or "key" to ${format} files with multiple columns.`);
   }
 
   const columnIndex = hasHeader ? headerIndex : 0;
@@ -94,6 +92,11 @@ export function parseApiKeyCsv(csv: string): { keys: string[]; duplicateCount: n
     keys.push(key);
   }
 
-  if (keys.length === 0) throw new Error("No API keys were found in the CSV file.");
+  if (keys.length === 0) throw new Error(`No API keys were found in the ${format} file.`);
   return { keys, duplicateCount };
+}
+
+export function parseApiKeyCsv(csv: string): { keys: string[]; duplicateCount: number } {
+  const contents = csv.replace(/^\uFEFF/, "");
+  return parseApiKeyRows(parseCsvRows(contents, detectDelimiter(contents)), "CSV");
 }

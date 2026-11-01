@@ -1,17 +1,15 @@
 import {
+  AlertTriangle,
   BookOpen,
-  Coffee,
-  Code2,
+  ChevronDown,
   Clock3,
   FileText,
   Copy,
   Filter,
-  GraduationCap,
   Image as ImageIcon,
   MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
-  PenLine,
   Plus,
   Search,
   Settings,
@@ -45,9 +43,10 @@ import { MarkdownContent } from "../components/MarkdownContent";
 import { Toast } from "@conduit/ui";
 import { convertFileToText } from "../lib/attachmentText";
 import { estimateTokens, makeTokenSummary } from "../lib/tokens";
+import { downloadConversation } from "../lib/conversationExport";
 import { buildMemorySystemPrompt, extractUserMemories } from "../lib/userMemory";
 import { fullDateTime, msgTime } from "../lib/time";
-import { useAppStore } from "../store";
+import { useAppStore, type ChatConversation } from "../store";
 import type { ChatAlternative, ChatComparisonRequest } from "../types";
 
 type DictationEvent = {
@@ -73,6 +72,10 @@ type SpeechWindow = Window & {
 
 function formatFileSize(size: number): string {
   return size < 1024 ? `${size} B` : `${(size / 1024).toFixed(1)} KB`;
+}
+
+function shortModelName(model: string): string {
+  return model.split(/[/:]/).at(-1) ?? model;
 }
 
 function messageContentWithAttachments(content: string, attachments?: ChatAttachment[]): string {
@@ -134,12 +137,15 @@ export function ChatPage() {
   const connections = useAppStore((state) => state.connections);
   const setConnections = useAppStore((state) => state.setConnections);
   const activeConnectionId = useAppStore((state) => state.activeConnectionId);
+  const comparisonJudgeConnectionId = useAppStore((state) => state.comparisonJudgeConnectionId);
   const setActiveConnectionId = useAppStore((state) => state.setActiveConnectionId);
+  const setComparisonJudgeConnectionId = useAppStore((state) => state.setComparisonJudgeConnectionId);
   const activeModel = useAppStore((state) => state.activeModel);
   const setActiveModel = useAppStore((state) => state.setActiveModel);
   const activeConversationId = useAppStore((state) => state.activeConversationId);
   const setActiveConversationId = useAppStore((state) => state.setActiveConversationId);
   const conversations = useAppStore((state) => state.conversations);
+  const setConversations = useAppStore((state) => state.setConversations);
   const addConversation = useAppStore((state) => state.addConversation);
   const appendMessage = useAppStore((state) => state.appendMessage);
   const updateConversation = useAppStore((state) => state.updateConversation);
@@ -155,9 +161,8 @@ export function ChatPage() {
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [processingAttachments, setProcessingAttachments] = useState(false);
   const [loadingConnections, setLoadingConnections] = useState(true);
-  const [comparisonEnabled, setComparisonEnabled] = useState(false);
   const [comparisonCandidates, setComparisonCandidates] = useState<ChatComparisonRequest["candidates"]>([]);
-  const [comparisonJudgeMode, setComparisonJudgeMode] = useState<"provider" | "system">("provider");
+  const [comparisonJudgeMode, setComparisonJudgeMode] = useState<"provider" | "system">("system");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [temperature, setTemperature] = useState("");
   const [maxTokens, setMaxTokens] = useState("");
@@ -173,8 +178,13 @@ export function ChatPage() {
   const [dictating, setDictating] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 720);
   const [sidebarSearch, setSidebarSearch] = useState("");
+  const [generationOptionsOpen, setGenerationOptionsOpen] = useState(() => !simpleMode);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [modelSearchQuery, setModelSearchQuery] = useState("");
+  const [renamingConversationId, setRenamingConversationId] = useState<string | null>(null);
+  const [renamingConversationTitle, setRenamingConversationTitle] = useState("");
+  const [pendingConversationDeleteId, setPendingConversationDeleteId] = useState<string | null>(null);
   const messagesPanel = useRef<HTMLElement>(null);
-  const generationOptions = useRef<HTMLDetailsElement>(null);
   const shouldAutoScroll = useRef(true);
   const previousConversationId = useRef(activeConversationId);
   const requestController = useRef<AbortController | null>(null);
@@ -183,6 +193,10 @@ export function ChatPage() {
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
   const sidebarSearchInput = useRef<HTMLInputElement>(null);
+  const modelSearchInput = useRef<HTMLInputElement>(null);
+  const modelPickerTrigger = useRef<HTMLButtonElement>(null);
+  const composerInput = useRef<HTMLTextAreaElement>(null);
+  const cancelRenameRef = useRef(false);
 
   useEffect(() => () => {
     requestController.current?.abort();
@@ -192,6 +206,15 @@ export function ChatPage() {
   }, []);
 
   useEffect(() => {
+    setGenerationOptionsOpen(!simpleMode);
+  }, [simpleMode]);
+
+  useEffect(() => {
+    if (modelPickerOpen) modelSearchInput.current?.focus();
+    else setModelSearchQuery("");
+  }, [modelPickerOpen]);
+
+  useEffect(() => {
     const handleNewChatShortcut = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "k") return;
       event.preventDefault();
@@ -199,6 +222,9 @@ export function ChatPage() {
       setDraft("");
       setAttachments([]);
       setError("");
+      setStatus("idle");
+      if (window.innerWidth <= 720) setSidebarOpen(true);
+      window.requestAnimationFrame(() => sidebarSearchInput.current?.focus());
     };
     window.addEventListener("keydown", handleNewChatShortcut);
     return () => window.removeEventListener("keydown", handleNewChatShortcut);
@@ -220,9 +246,29 @@ export function ChatPage() {
   );
   const pinnedConversations = matchingConversations.filter((conversation) => conversation.pinned);
   const recentConversations = matchingConversations.filter((conversation) => !conversation.pinned);
-  const activeConnection = connections.find((connection) => connection.id === activeConnectionId) ?? null;
-  const comparisonActive = connections.length === 2 || comparisonEnabled;
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const conversationGroups = [
+    { label: "Today", conversations: [] as ChatConversation[] },
+    { label: "Yesterday", conversations: [] as ChatConversation[] },
+    { label: "Previous 7 days", conversations: [] as ChatConversation[] },
+    { label: "Earlier", conversations: [] as ChatConversation[] },
+  ];
+  recentConversations.forEach((conversation) => {
+    const conversationDay = new Date(conversation.updatedAt);
+    conversationDay.setHours(0, 0, 0, 0);
+    const daysAgo = Math.floor((todayStart.getTime() - conversationDay.getTime()) / 86_400_000);
+    const groupIndex = daysAgo < 1 ? 0 : daysAgo < 2 ? 1 : daysAgo <= 7 ? 2 : 3;
+    conversationGroups[groupIndex]?.conversations.push(conversation);
+  });
+  const activeConnection = connections.find((connection) => connection.id === activeConnectionId)
+    ?? connections.find((connection) => connection.models.length > 0)
+    ?? null;
+  const comparisonActive = connections.length >= 2;
   const messages = currentConversation?.messages ?? [];
+  const failedAssistant = status === "failed"
+    ? [...messages].reverse().find((message) => message.role === "assistant" && message.failed)
+    : undefined;
   const virtualizer = useVirtualizer({
     count: messages.length,
     getScrollElement: () => messagesPanel.current,
@@ -247,6 +293,9 @@ export function ChatPage() {
   const tokenSummary = hasCompleteUsage
     ? makeTokenSummary(reportedUsage)
     : makeTokenSummary(undefined, estimatedTokens);
+  const filteredModels = activeConnection?.models.filter((model) =>
+    model.toLocaleLowerCase().includes(modelSearchQuery.trim().toLocaleLowerCase()),
+  ) ?? [];
 
   useEffect(() => {
     setSystemPrompt(currentConversation?.systemPrompt ?? "");
@@ -261,8 +310,17 @@ export function ChatPage() {
       .then((result) => {
         if (cancelled) return;
         setConnections(result.connections);
-        setActiveConnectionId(result.activeId);
-        const active = result.connections.find((connection) => connection.id === result.activeId);
+        setComparisonJudgeConnectionId(result.comparisonJudgeId ?? null);
+        setComparisonJudgeMode(result.comparisonJudgeId ? "provider" : "system");
+        setComparisonCandidates(result.connections
+          .filter((connection) => (
+            connection.models.length > 0
+            && connection.id !== result.comparisonJudgeId
+          ))
+          .map((connection) => ({ connectionId: connection.id, model: connection.models[0] ?? "" })));
+        const active = result.connections.find((connection) => connection.id === result.activeId)
+          ?? result.connections.find((connection) => connection.models.length > 0);
+        setActiveConnectionId(result.activeId ?? active?.id ?? null);
         if (active && !active.models.includes(useAppStore.getState().activeModel)) {
           setActiveModel(active.models[0] ?? "");
         }
@@ -279,7 +337,7 @@ export function ChatPage() {
     return () => {
       cancelled = true;
     };
-  }, [setActiveConnectionId, setActiveModel, setConnections]);
+  }, [setActiveConnectionId, setActiveModel, setComparisonJudgeConnectionId, setConnections]);
 
   useEffect(() => {
     const panel = messagesPanel.current;
@@ -375,20 +433,32 @@ export function ChatPage() {
       setError(`The message and attached files exceed the ${formatFileSize(MAX_CHAT_HISTORY_CHARACTERS)} chat text limit. Remove files or use smaller files.`);
       return;
     }
-    const comparison = connections.length === 2
+    const configuredJudge = connections.find((connection) => connection.id === comparisonJudgeConnectionId);
+    const judgeConnectionId = comparisonJudgeMode === "provider"
+      ? configuredJudge?.id ?? activeConnection?.id ?? null
+      : null;
+    const comparisonCandidatesToSend = (connections.length === 2
+      ? connections
+        .filter((connection) => connection.models.length > 0)
+        .map((connection) => ({
+          connectionId: connection.id,
+          model: connection.id === activeConnection?.id && connection.models.includes(activeModel)
+            ? activeModel
+            : connection.models[0] ?? "",
+        }))
+      : comparisonCandidates)
+      .filter((candidate) => candidate.connectionId !== judgeConnectionId);
+    const comparison = comparisonActive && comparisonCandidatesToSend.length > 0
       ? {
-          mode: "automatic" as const,
+          mode: connections.length === 2 && comparisonCandidatesToSend.length === 2
+            ? "automatic" as const
+            : "custom" as const,
           judgeMode: comparisonJudgeMode,
-          candidates: connections.map((connection) => ({
-            connectionId: connection.id,
-            model: connection.id === activeConnectionId ? activeModel : connection.models[0] ?? "",
-          })),
+          candidates: comparisonCandidatesToSend,
         }
-      : comparisonEnabled
-        ? { mode: "custom" as const, judgeMode: comparisonJudgeMode, candidates: comparisonCandidates }
-        : undefined;
-    if (comparison && comparison.candidates.length < 2) {
-      setError("Select at least two API connections to compare responses.");
+      : undefined;
+    if (comparisonActive && !comparison) {
+      setError("No API connection with a conversational model is available to respond.");
       return;
     }
     if (comparison?.candidates.some((candidate) => !candidate.model)) {
@@ -398,13 +468,20 @@ export function ChatPage() {
     if (
       comparison?.mode === "custom" &&
       comparison.judgeMode === "provider" &&
-      comparison.candidates.some((candidate) => candidate.connectionId === activeConnectionId)
+      comparison.candidates.some((candidate) => candidate.connectionId === judgeConnectionId)
     ) {
       setError("Choose respondent providers that are different from the judge provider.");
       return;
     }
-    if (!activeConnection || !activeModel) {
-      setError("Add and activate a valid API connection before sending.");
+    const requestConnection = comparisonJudgeMode === "provider" && comparison
+      ? configuredJudge ?? activeConnection
+      : activeConnection;
+    const requestModel = requestConnection && requestConnection.id === activeConnection?.id
+      && requestConnection.models.includes(activeModel)
+      ? activeModel
+      : requestConnection?.models[0] ?? "";
+    if (!requestConnection || !requestModel) {
+      setError("Add an API connection with a conversational model before sending.");
       return;
     }
 
@@ -415,9 +492,9 @@ export function ChatPage() {
         title: "New conversation",
         createdAt: now,
         updatedAt: now,
-        provider: activeConnection.provider,
-        model: activeModel,
-        connectionId: activeConnection.id,
+        provider: requestConnection.provider,
+        model: requestModel,
+        connectionId: requestConnection.id,
         messages: [],
       };
     if (!currentConversation) addConversation(conversation);
@@ -440,7 +517,7 @@ export function ChatPage() {
         content: userContent,
         ...(messageAttachments.length > 0 ? { attachments: messageAttachments } : {}),
         ts: now,
-        model: activeModel,
+        model: requestModel,
       });
     }
     const assistantId = continueMessageId ?? globalThis.crypto.randomUUID();
@@ -483,9 +560,9 @@ export function ChatPage() {
       title: item.title === "New conversation"
         ? (userContent || messageAttachments.map((file) => file.name).join(", ")).slice(0, 72)
         : item.title,
-      provider: activeConnection.provider,
-      connectionId: activeConnection.id,
-      model: activeModel,
+      provider: requestConnection.provider,
+      connectionId: requestConnection.id,
+      model: requestModel,
       systemPrompt: generationOptions.systemPrompt,
       temperature: generationOptions.temperature,
       maxTokens: generationOptions.maxTokens,
@@ -502,8 +579,8 @@ export function ChatPage() {
     try {
       let receivedContent = false;
       await streamChat(
-        activeConnection.id,
-        activeModel,
+        requestConnection.id,
+        requestModel,
         requestMessages,
         (delta) => {
           receivedContent = true;
@@ -566,7 +643,7 @@ export function ChatPage() {
             : undefined;
         if (status) {
           setConnections(useAppStore.getState().connections.map((connection) =>
-            connection.id === activeConnection.id ? { ...connection, status } : connection,
+            connection.id === requestConnection.id ? { ...connection, status } : connection,
           ));
         }
       }
@@ -633,21 +710,113 @@ export function ChatPage() {
 
   const exportConversation = (format: "markdown" | "json") => {
     if (!currentConversation) return;
-    const body = format === "json"
-      ? JSON.stringify(currentConversation, null, 2)
-      : `# ${currentConversation.title}\n\n${currentConversation.messages
-          .map((message) => `## ${message.role === "user" ? "You" : "Assistant"}\n\n${message.content}`)
-          .join("\n\n")}\n`;
-    const file = new Blob([body], { type: format === "json" ? "application/json" : "text/markdown" });
-    const url = URL.createObjectURL(file);
-    const link = document.createElement("a");
-    link.href = url;
-    const safeTitle = currentConversation.title.replace(/[\\/:*?"<>|]+/g, "-") || "conversation";
-    link.download = `${safeTitle}.${format === "json" ? "json" : "md"}`;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+    downloadConversation(currentConversation, format);
+  };
+
+  const selectConnection = (connectionId: string) => {
+    const nextConnection = connections.find((connection) => connection.id === connectionId);
+    setActiveConnectionId(nextConnection?.id ?? null);
+    setActiveModel(nextConnection?.models[0] ?? "");
+    if (comparisonJudgeMode === "provider" && !comparisonJudgeConnectionId) {
+      setComparisonCandidates((current) =>
+        current.filter((candidate) => candidate.connectionId !== nextConnection?.id),
+      );
+    }
+  };
+
+  const saveConversationTitle = (conversationId: string) => {
+    const title = renamingConversationTitle.trim();
+    if (title) updateConversation(conversationId, (conversation) => ({ ...conversation, title }));
+    setRenamingConversationId(null);
+  };
+
+  const deleteConversation = (conversationId: string) => {
+    setConversations(conversations.filter((conversation) => conversation.id !== conversationId));
+    if (activeConversationId === conversationId) setActiveConversationId(null);
+    setPendingConversationDeleteId(null);
+  };
+
+  const renderConversationRow = (conversation: ChatConversation) => {
+    const isRenaming = renamingConversationId === conversation.id;
+    const isConfirmingDelete = pendingConversationDeleteId === conversation.id;
+    return (
+      <div className="sidebar-conversation-row" key={conversation.id}>
+        {isRenaming ? (
+          <input
+            className="sidebar-rename-input"
+            aria-label={`Rename ${conversation.title}`}
+            value={renamingConversationTitle}
+            autoFocus
+            maxLength={120}
+            onChange={(event) => setRenamingConversationTitle(event.target.value)}
+            onBlur={() => {
+              if (cancelRenameRef.current) {
+                cancelRenameRef.current = false;
+                return;
+              }
+              saveConversationTitle(conversation.id);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                saveConversationTitle(conversation.id);
+              } else if (event.key === "Escape") {
+                cancelRenameRef.current = true;
+                setRenamingConversationId(null);
+                window.setTimeout(() => {
+                  cancelRenameRef.current = false;
+                }, 0);
+              }
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className={`sidebar-conversation${conversation.id === activeConversationId ? " is-active" : ""}`}
+            aria-current={conversation.id === activeConversationId ? "page" : undefined}
+            title={conversation.title}
+            onClick={() => {
+              setActiveConversationId(conversation.id);
+              setError("");
+              setStatus("idle");
+            }}
+          >
+            <MessageSquare size={16} aria-hidden="true" />
+            <span>{conversation.title}</span>
+          </button>
+        )}
+        {isConfirmingDelete ? (
+          <div className="sidebar-conversation-confirm">
+            <button type="button" disabled={sending} onClick={() => deleteConversation(conversation.id)}>Delete</button>
+            <button type="button" aria-label="Cancel delete" disabled={sending} onClick={() => setPendingConversationDeleteId(null)}>Cancel</button>
+          </div>
+        ) : (
+          <div className="sidebar-conversation-actions">
+            <button
+              type="button"
+              aria-label={`Rename ${conversation.title}`}
+              title="Rename conversation"
+              disabled={sending}
+              onClick={() => {
+                setRenamingConversationId(conversation.id);
+                setRenamingConversationTitle(conversation.title);
+              }}
+            >
+              <Pencil size={14} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-label={`Delete ${conversation.title}`}
+              title="Delete conversation"
+              disabled={sending}
+              onClick={() => setPendingConversationDeleteId(conversation.id)}
+            >
+              <Trash2 size={14} aria-hidden="true" />
+            </button>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const startOrStopDictation = () => {
@@ -831,7 +1000,15 @@ export function ChatPage() {
 
   return (
     <div className={`chat-workspace${sidebarOpen ? "" : " sidebar-collapsed"}`}>
-      <aside className="chat-sidebar" aria-label="Main sidebar">
+      {sidebarOpen && window.innerWidth <= 720 && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Close sidebar"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      <aside id="chat-sidebar" className="chat-sidebar" aria-label="Main sidebar">
         <div className="chat-sidebar-header">
           <Link to="/" className="chat-sidebar-brand" aria-label="Conduit home">
             <span className="conduit-asterisk" aria-hidden="true">✳</span>
@@ -841,6 +1018,7 @@ export function ChatPage() {
             type="button"
             className="sidebar-icon-button"
             aria-label="Collapse sidebar"
+            aria-expanded={sidebarOpen}
             title="Collapse sidebar"
             onClick={() => setSidebarOpen(false)}
           >
@@ -856,6 +1034,8 @@ export function ChatPage() {
             setDraft("");
             setAttachments([]);
             setError("");
+            setStatus("idle");
+            if (window.innerWidth <= 720) setSidebarOpen(false);
           }}
         >
           <Plus size={18} aria-hidden="true" />
@@ -870,40 +1050,19 @@ export function ChatPage() {
             ref={sidebarSearchInput}
             type="search"
             aria-label="Search conversations"
-            placeholder="Search"
+            placeholder="Search chats"
             value={sidebarSearch}
             onChange={(event) => setSidebarSearch(event.target.value)}
           />
         </label>
 
         <nav className="chat-sidebar-nav" aria-label="Workspace navigation">
-          <button type="button" className="chat-sidebar-link" onClick={() => sidebarSearchInput.current?.focus()}>
-            <Search size={18} aria-hidden="true" /><span>Search chats</span>
-          </button>
-          <Link to="/api-config" className="chat-sidebar-link">
-            <Sparkles size={18} aria-hidden="true" /><span>Connect AI</span>
-          </Link>
           <Link to="/history" className="chat-sidebar-link">
             <Clock3 size={18} aria-hidden="true" /><span>Chat history</span>
           </Link>
           <Link to="/getting-started" className="chat-sidebar-link">
             <BookOpen size={18} aria-hidden="true" /><span>Getting started</span>
           </Link>
-          <Link to="/settings" className="chat-sidebar-link">
-            <Settings size={18} aria-hidden="true" /><span>Settings</span>
-          </Link>
-          <button
-            type="button"
-            className="chat-sidebar-link"
-            onClick={() => {
-              const options = generationOptions.current;
-              if (!options) return;
-              options.open = true;
-              options.querySelector("summary")?.focus();
-            }}
-          >
-            <SlidersHorizontal size={18} aria-hidden="true" /><span>More options</span>
-          </button>
         </nav>
 
         <div className="chat-sidebar-conversations">
@@ -914,38 +1073,15 @@ export function ChatPage() {
           {pinnedConversations.length > 0 && (
             <section className="sidebar-conversation-section" aria-label="Pinned conversations">
               <h2>Pinned</h2>
-              {pinnedConversations.map((conversation) => (
-                <button
-                  type="button"
-                  key={conversation.id}
-                  className={`sidebar-conversation${conversation.id === activeConversationId ? " is-active" : ""}`}
-                  aria-current={conversation.id === activeConversationId ? "page" : undefined}
-                  title={conversation.title}
-                  onClick={() => setActiveConversationId(conversation.id)}
-                >
-                  <MessageSquare size={16} aria-hidden="true" />
-                  <span>{conversation.title}</span>
-                </button>
-              ))}
+              {pinnedConversations.map(renderConversationRow)}
             </section>
           )}
-          {recentConversations.length > 0 && (
-            <section className="sidebar-conversation-section" aria-label="Recent conversations">
-              {recentConversations.map((conversation) => (
-                <button
-                  type="button"
-                  key={conversation.id}
-                  className={`sidebar-conversation${conversation.id === activeConversationId ? " is-active" : ""}`}
-                  aria-current={conversation.id === activeConversationId ? "page" : undefined}
-                  title={conversation.title}
-                  onClick={() => setActiveConversationId(conversation.id)}
-                >
-                  <MessageSquare size={16} aria-hidden="true" />
-                  <span>{conversation.title}</span>
-                </button>
-              ))}
+          {conversationGroups.map((group) => group.conversations.length > 0 && (
+            <section className="sidebar-conversation-section" aria-label={group.label} key={group.label}>
+              <h2>{group.label}</h2>
+              {group.conversations.map(renderConversationRow)}
             </section>
-          )}
+          ))}
           {matchingConversations.length === 0 && !sidebarSearch && (
             <p className="sidebar-empty">Your chats will show up here.</p>
           )}
@@ -953,7 +1089,14 @@ export function ChatPage() {
             <p className="sidebar-no-results">No matching conversations</p>
           )}
         </div>
-
+        <nav className="chat-sidebar-footer" aria-label="Settings and connections">
+          <Link to="/api-config" className="chat-sidebar-link">
+            <Sparkles size={18} aria-hidden="true" /><span>Connect AI</span>
+          </Link>
+          <Link to="/settings" className="chat-sidebar-link">
+            <Settings size={18} aria-hidden="true" /><span>Settings</span>
+          </Link>
+        </nav>
       </aside>
 
       <div className="chat-content">
@@ -962,19 +1105,123 @@ export function ChatPage() {
             type="button"
             className="sidebar-icon-button chat-topbar-toggle"
             aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            aria-expanded={sidebarOpen}
+            aria-controls="chat-sidebar"
             title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
             onClick={() => setSidebarOpen((open) => !open)}
           >
             {sidebarOpen ? <PanelLeftClose size={19} /> : <PanelLeftOpen size={19} />}
           </button>
-          <span className="chat-topbar-label">{currentConversation?.title || "Chat"}</span>
+          <div className="chat-topbar-title" title={currentConversation?.title || "New chat"}>
+            {currentConversation?.title || "New chat"}
+          </div>
+          <div
+            className="model-picker"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) setModelPickerOpen(false);
+            }}
+          >
+            <button
+              ref={modelPickerTrigger}
+              type="button"
+              className="model-picker-trigger"
+              aria-label={`Choose model. Current: ${modelLabel}`}
+              aria-expanded={modelPickerOpen}
+              aria-haspopup="dialog"
+              aria-controls="model-picker-menu"
+              title={modelLabel}
+              disabled={sending || connections.length === 0}
+              onClick={() => setModelPickerOpen((open) => !open)}
+            >
+              <span className="model-picker-name">
+                {activeConnection
+                  ? `${activeConnection.providerName} · ${shortModelName(activeModel) || "Choose model"}`
+                  : "Connect AI"}
+              </span>
+              <ChevronDown size={15} aria-hidden="true" />
+            </button>
+            {modelPickerOpen && (
+              <div
+                className="model-picker-menu glass"
+                id="model-picker-menu"
+                role="dialog"
+                aria-label="Choose provider and model"
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setModelPickerOpen(false);
+                    modelPickerTrigger.current?.focus();
+                  }
+                }}
+              >
+                <label className="model-picker-search">
+                  <Search size={16} aria-hidden="true" />
+                  <span className="sr-only">Search models</span>
+                  <input
+                    ref={modelSearchInput}
+                    type="search"
+                    aria-label="Search models"
+                    placeholder="Search models"
+                    value={modelSearchQuery}
+                    onChange={(event) => setModelSearchQuery(event.target.value)}
+                  />
+                </label>
+                <label className="model-picker-provider-select">
+                  <span>Provider</span>
+                  <select
+                    aria-label="AI provider"
+                    value={activeConnectionId ?? ""}
+                    disabled={sending}
+                    onChange={(event) => selectConnection(event.target.value)}
+                  >
+                    {connections.map((connection) => (
+                      <option key={connection.id} value={connection.id}>
+                        {connection.providerName} · {connection.keyHint}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="model-picker-results" role="listbox" aria-label="Available models">
+                  {filteredModels.length > 0 ? filteredModels.map((model) => (
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={model === activeModel}
+                      disabled={sending}
+                      key={model}
+                      onClick={() => {
+                        setActiveModel(model);
+                        setModelPickerOpen(false);
+                        modelPickerTrigger.current?.focus();
+                      }}
+                    >
+                      {shortModelName(model)}
+                    </button>
+                  )) : <p>No models match your search.</p>}
+                </div>
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            className="chat-topbar-link"
+            aria-label="Chat settings"
+            aria-expanded={generationOptionsOpen}
+            aria-controls="generation-options"
+            title="Chat settings"
+            onClick={() => setGenerationOptionsOpen((open) => !open)}
+          >
+            <SlidersHorizontal size={18} aria-hidden="true" />
+          </button>
         </header>
         <main id="main-content" className="chat-page" tabIndex={0} aria-label="Chat workspace">
         <h1 className="sr-only">{currentConversation?.title || "Chat"}</h1>
-        <div className="model-pill glass">{modelLabel}</div>
 
-        <details ref={generationOptions} className="generation-options glass" open={!simpleMode}>
-          <summary>More options</summary>
+        <details
+          id="generation-options"
+          aria-label="Chat settings"
+          className="generation-options glass"
+          open={generationOptionsOpen}
+        >
           {currentConversation && (
             <div className="conversation-toolbar">
               <label>
@@ -1008,20 +1255,11 @@ export function ChatPage() {
           )}
           <div className="generation-fields">
             <label>
-              {comparisonActive ? "Judge provider" : "AI service"}
+              AI service
               <select
                 aria-label="Chat connection"
                 value={activeConnectionId ?? ""}
-                onChange={(event) => {
-                  const nextConnection = connections.find((connection) => connection.id === event.target.value);
-                  setActiveConnectionId(nextConnection?.id ?? null);
-                  setActiveModel(nextConnection?.models[0] ?? "");
-                  if (comparisonJudgeMode === "provider") {
-                    setComparisonCandidates((current) =>
-                      current.filter((candidate) => candidate.connectionId !== nextConnection?.id),
-                    );
-                  }
-                }}
+                onChange={(event) => selectConnection(event.target.value)}
                 disabled={sending || connections.length === 0}
               >
                 {connections.length === 0 ? <option value="">No connections</option> : connections.map((connection) => (
@@ -1050,48 +1288,28 @@ export function ChatPage() {
                 onChange={(event) => {
                   const judgeMode = event.target.value === "system" ? "system" : "provider";
                   setComparisonJudgeMode(judgeMode);
-                  if (judgeMode === "provider" && activeConnectionId) {
-                    setComparisonCandidates((current) =>
-                      current.filter((candidate) => candidate.connectionId !== activeConnectionId),
-                    );
-                  }
+                  const judgeId = judgeMode === "provider"
+                    ? comparisonJudgeConnectionId ?? activeConnection?.id
+                    : null;
+                  setComparisonCandidates(connections
+                    .filter((connection) => connection.models.length > 0 && connection.id !== judgeId)
+                    .map((connection) => ({ connectionId: connection.id, model: connection.models[0] ?? "" })));
                 }}
                 disabled={sending}
               >
                 <option value="system">System (select the closest response)</option>
-                <option value="provider">Selected API key (synthesize responses)</option>
+                <option value="provider">
+                  {comparisonJudgeConnectionId ? "Configured API key (synthesize responses)" : "Selected API key (synthesize responses)"}
+                </option>
               </select>
             </label>
           )}
           {connections.length === 2 && (
             <p className="comparison-mode-notice" role="status">
-              Automatic comparison is on: both configured APIs respond. The system can select the closest response, or the selected API can synthesize a final answer.
+              Automatic comparison is on: both saved APIs receive your message. Failed responses are skipped; the selected judge chooses the final answer.
             </p>
           )}
           {connections.length > 2 && (
-            <label className="comparison-toggle">
-              <input
-                type="checkbox"
-                aria-label="Enable multi-provider comparison"
-                checked={comparisonEnabled}
-                onChange={(event) => {
-                  const enabled = event.target.checked;
-                  setComparisonEnabled(enabled);
-                  setComparisonCandidates(enabled
-                    ? connections
-                      .filter((connection) => (
-                        (comparisonJudgeMode === "system" || connection.id !== activeConnectionId)
-                        && connection.models.length > 0
-                      ))
-                      .map((connection) => ({ connectionId: connection.id, model: connection.models[0] }))
-                    : []);
-                }}
-                disabled={sending}
-              />
-              Enable multi-provider comparison
-            </label>
-          )}
-          {comparisonEnabled && (
             <fieldset className="comparison-settings" disabled={sending}>
               <legend>Respondent providers</legend>
               {connections.map((connection) => {
@@ -1104,7 +1322,8 @@ export function ChatPage() {
                         aria-label={`Send to ${connection.providerName} ${connection.keyHint}`}
                         checked={Boolean(candidate)}
                         disabled={connection.models.length === 0
-                          || (comparisonJudgeMode === "provider" && connection.id === activeConnectionId)}
+                          || (comparisonJudgeMode === "provider"
+                            && connection.id === (comparisonJudgeConnectionId ?? activeConnection?.id))}
                         onChange={(event) => {
                           if (event.target.checked) {
                             setComparisonCandidates((current) => [
@@ -1138,11 +1357,10 @@ export function ChatPage() {
                 );
               })}
               <p>
-                Choose at least two respondent APIs. With System selected, the closest response is returned without another API call.
-                With an API key selected, that provider must not also be a respondent.
+                All available APIs respond by default. Uncheck any API you want to skip. The selected judge is not a respondent.
               </p>
-              {comparisonCandidates.length < 2 && (
-                <p className="error-alert" role="status">Select at least two respondent APIs.</p>
+              {comparisonCandidates.length === 0 && (
+                <p className="error-alert" role="status">Select at least one API to respond.</p>
               )}
             </fieldset>
           )}
@@ -1226,8 +1444,30 @@ export function ChatPage() {
         >
           {messages.length === 0 ? (
             <div className="welcome-hero">
+              <span className="welcome-asterisk" aria-hidden="true">✳</span>
               <h2>Where should we begin?</h2>
               <p>What would you like to work on?</p>
+              <div className="welcome-suggestions" aria-label="Suggested prompts">
+                {[
+                  "Help me brainstorm ideas",
+                  "Explain a complex topic",
+                  "Draft or improve a message",
+                  "Write a quick piece of code",
+                ].map((suggestion) => (
+                  <button
+                    type="button"
+                    key={suggestion}
+                    disabled={!activeConnection || loadingConnections}
+                    onClick={() => {
+                      setDraft(suggestion);
+                      composerInput.current?.focus();
+                    }}
+                  >
+                    <Sparkles size={15} aria-hidden="true" />
+                    <span>{suggestion}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           ) : (
             <div className="messages-virtual-content" style={{ height: `${virtualizer.getTotalSize()}px` }}>
@@ -1241,6 +1481,7 @@ export function ChatPage() {
                   ? translatedResponses[translationMessageId]
                   : undefined;
                 const displayedContent = translation?.content ?? message.content;
+                const messageError = message === failedAssistant ? error : "";
                 return (
                   <article
                     key={messageId ?? virtualItem.key}
@@ -1250,13 +1491,37 @@ export function ChatPage() {
                     style={{ transform: `translateY(${virtualItem.start}px)` }}
                   >
                     <div className="message-meta">
-                      <strong>{message.role === "user" ? "You" : "AI"}</strong>
+                      {message.role === "assistant" && (
+                        <span className="message-avatar" aria-hidden="true"><Sparkles size={15} /></span>
+                      )}
+                      <strong>{message.role === "user" ? "You" : "Conduit"}</strong>
                       <time dateTime={new Date(message.ts ?? Date.now()).toISOString()} title={fullDateTime(message.ts ?? Date.now())}>
                         {msgTime(message.ts ?? Date.now())}
                       </time>
-                      {message.model && <small>{message.model}</small>}
+                      {message.model && <small title={message.model}>{shortModelName(message.model)}</small>}
                     </div>
                     <div className="message-body" aria-live={sending && virtualItem.index === messages.length - 1 ? "polite" : undefined}>
+                      {messageError && (
+                        <div className="message-error-card" role="alert">
+                          <div className="message-error-heading">
+                            <AlertTriangle size={19} aria-hidden="true" />
+                            <div>
+                              <h3>This request couldn't be completed</h3>
+                              <p>Check your provider connection and API key, then try again.</p>
+                            </div>
+                          </div>
+                          <details>
+                            <summary>Technical details</summary>
+                            <pre>{messageError}</pre>
+                          </details>
+                          <div className="message-error-actions">
+                            <Link to="/api-config">Open API settings</Link>
+                            <button type="button" className="primary-button" onClick={() => retryResponse(message.id ?? "", false)}>
+                              <RefreshCw size={15} aria-hidden="true" /> Retry
+                            </button>
+                          </div>
+                        </div>
+                      )}
                       {editingMessageId === messageId ? (
                         <div className="message-edit">
                           <textarea aria-label="Edit message" value={editingContent} onChange={(event) => setEditingContent(event.target.value)} />
@@ -1264,18 +1529,24 @@ export function ChatPage() {
                           <button type="button" className="secondary-button" onClick={() => setEditingMessageId(null)}>Cancel edit</button>
                         </div>
                       ) : message.content ? (
-                        <MarkdownContent
-                          content={displayedContent}
-                          onCopyError={() => setError("Could not copy code to the clipboard.")}
-                          onAction={(prompt) => {
-                            if (sending) {
-                              setDraft(prompt);
-                              return;
-                            }
-                            void handleSend(prompt);
-                          }}
-                        />
-                      ) : sending && message.role === "assistant" ? "Thinking..." : ""}
+                        <div className="message-content">
+                          <MarkdownContent
+                            content={displayedContent}
+                            onCopyError={() => setError("Could not copy code to the clipboard.")}
+                            onAction={(prompt) => {
+                              if (sending) {
+                                setDraft(prompt);
+                                return;
+                              }
+                              void handleSend(prompt);
+                            }}
+                          />
+                        </div>
+                      ) : sending && message.role === "assistant" ? (
+                        <div className="typing-indicator" role="status" aria-label="Conduit is thinking">
+                          <span /><span /><span />
+                        </div>
+                      ) : ""}
                       {message.comparisonNotice && (
                         <p className="comparison-mode-notice" role="status">{message.comparisonNotice}</p>
                       )}
@@ -1327,21 +1598,26 @@ export function ChatPage() {
                           <button
                             type="button"
                             aria-label="Copy response"
+                            title={copiedMessageId === messageId ? "Copied!" : "Copy response"}
                             className="response-copy-button"
                             onClick={() => void Promise.resolve().then(() => navigator.clipboard.writeText(displayedContent)).then(() => {
                               setCopiedMessageId(messageId ?? null);
                             }).catch(() => setError("Could not copy this response. Check clipboard access, then try again."))}
                           >
-                            <Copy size={18} /> {copiedMessageId === messageId ? "Copied!" : "Copy"}
+                            <Copy size={18} aria-hidden="true" />
+                            <span className="message-action-label">{copiedMessageId === messageId ? "Copied!" : "Copy"}</span>
                           </button>
                           {renderTranslationControls(translationMessageId, message.content)}
                           {"speechSynthesis" in window && (
                             <button
                               type="button"
                               className="secondary-button"
+                              aria-label={readingMessageId === messageId ? "Stop reading response" : "Read response aloud"}
+                              title={readingMessageId === messageId ? "Stop reading" : "Read aloud"}
                               onClick={() => toggleReadAloud(messageId ?? "", displayedContent)}
                             >
-                              <Volume2 size={18} /> {readingMessageId === messageId ? "Stop reading" : "Read aloud"}
+                              <Volume2 size={18} aria-hidden="true" />
+                              <span className="message-action-label">{readingMessageId === messageId ? "Stop reading" : "Read aloud"}</span>
                             </button>
                           )}
                         </div>
@@ -1352,31 +1628,37 @@ export function ChatPage() {
                             <button
                               type="button"
                               className="secondary-button"
+                              aria-label="Edit and resend"
+                              title="Edit and resend"
                               onClick={() => {
                                 setEditingMessageId(messageId);
                                 setEditingContent(message.content);
                               }}
                             >
-                              <Pencil size={14} /> Edit and resend
+                              <Pencil size={14} aria-hidden="true" />
+                              <span className="message-action-label">Edit and resend</span>
                             </button>
                           )}
-                          {message.role === "assistant" && previousUser?.id && (
+                          {message.role === "assistant" && previousUser?.id && !messageError && (
                             message.incomplete || message.failed ? (
                               <>
-                                <button type="button" className="secondary-button" onClick={() => retryResponse(messageId, true)}>
-                                  <RefreshCw size={14} /> Continue
+                                <button type="button" className="secondary-button" aria-label="Continue" title="Continue" onClick={() => retryResponse(messageId, true)}>
+                                  <RefreshCw size={14} aria-hidden="true" />
+                                  <span className="message-action-label">Continue</span>
                                 </button>
-                                <button type="button" className="secondary-button" onClick={() => retryResponse(messageId, false)}>
-                                  <RefreshCw size={14} /> Retry
+                                <button type="button" className="secondary-button" aria-label="Retry" title="Retry" onClick={() => retryResponse(messageId, false)}>
+                                  <RefreshCw size={14} aria-hidden="true" />
+                                  <span className="message-action-label">Retry</span>
                                 </button>
                               </>
                             ) : (
-                              <button type="button" className="secondary-button" onClick={() => retryResponse(messageId, false)}>
-                                <RefreshCw size={14} /> Regenerate
+                              <button type="button" className="secondary-button" aria-label="Regenerate" title="Regenerate" onClick={() => retryResponse(messageId, false)}>
+                                <RefreshCw size={14} aria-hidden="true" />
+                                <span className="message-action-label">Regenerate</span>
                               </button>
                             )
                           )}
-                          <button type="button" className="icon-button" aria-label="Delete message" onClick={() => removeMessage(messageId)}>
+                          <button type="button" className="icon-button" aria-label="Delete message" title="Delete message" onClick={() => removeMessage(messageId)}>
                             <Trash2 size={14} />
                           </button>
                         </div>
@@ -1387,19 +1669,45 @@ export function ChatPage() {
               })}
             </div>
           )}
+          {connectionError && (
+            <div className="message-error-card" role="alert">
+              <div className="message-error-heading">
+                <AlertTriangle size={19} aria-hidden="true" />
+                <div>
+                  <h3>Couldn't load your AI providers</h3>
+                  <p>Check your connection or API settings, then try again.</p>
+                </div>
+              </div>
+              <details>
+                <summary>Technical details</summary>
+                <pre>{connectionError}</pre>
+              </details>
+              <div className="message-error-actions">
+                <Link to="/api-config">Open API settings</Link>
+              </div>
+            </div>
+          )}
+          {!connectionError && !loadingConnections && !activeConnection && (
+            <div className="message-error-card is-info" role="status">
+              <div className="message-error-heading">
+                <Sparkles size={19} aria-hidden="true" />
+                <div>
+                  <h3>Connect an AI provider</h3>
+                  <p>Add an API key to start a conversation.</p>
+                </div>
+              </div>
+              <div className="message-error-actions">
+                <Link to="/api-config">Open API settings</Link>
+              </div>
+            </div>
+          )}
         </section>
 
         <div className="status-line" aria-live="polite">
-          {sending ? "AI is thinking…" : status === "sent" ? "Response complete" : status === "stopped" ? "Generation stopped" : status === "failed" ? "Request failed" : ""}
+          {sending ? "Conduit is responding…" : status === "sent" ? "Response complete" : status === "stopped" ? "Generation stopped" : ""}
         </div>
 
         <div className="composer glass">
-          <div className="composer-topline">
-            <span className="composer-model" title={modelLabel}>
-              <Sparkles size={15} aria-hidden="true" />
-              <span>{activeModel || (loadingConnections ? "Connecting…" : "Choose a model")}</span>
-            </span>
-          </div>
           {attachments.length > 0 && (
             <ul className="attachment-list pending-attachments" aria-label="Files to attach">
               {attachments.map((file, index) => (
@@ -1421,11 +1729,12 @@ export function ChatPage() {
             </ul>
           )}
           <textarea
+            ref={composerInput}
             aria-label="Message"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder={activeConnection ? "Ask Conduit" : "Connect an AI service before chatting"}
-            rows={2}
+            rows={1}
             onInput={(event) => {
               event.currentTarget.style.height = "auto";
               event.currentTarget.style.height = `${event.currentTarget.scrollHeight}px`;
@@ -1439,6 +1748,10 @@ export function ChatPage() {
             }}
           />
           <div className="composer-row">
+            <span className="composer-model" title={modelLabel}>
+              <Sparkles size={15} aria-hidden="true" />
+              <span>{shortModelName(activeModel) || (loadingConnections ? "Connecting…" : "Choose a model")}</span>
+            </span>
             <input
               ref={fileInput}
               className="sr-only"
@@ -1464,7 +1777,7 @@ export function ChatPage() {
                 className="composer-attach-button"
                 aria-label="Attach"
                 aria-expanded={attachmentMenuOpen}
-                title="Images are converted to English OCR text; other binary files are converted to text"
+                title="Add files. Images are converted to English OCR text; other binary files are converted to text."
                 onClick={() => setAttachmentMenuOpen((open) => !open)}
                 disabled={!activeConnection || loadingConnections || sending || processingAttachments}
               >
@@ -1505,6 +1818,7 @@ export function ChatPage() {
                 className="danger-button"
                 onClick={startOrStopDictation}
                 aria-label={dictating ? "Stop microphone" : "Start microphone"}
+                title={dictating ? "Stop voice input" : "Voice input"}
               >
                 {dictating ? <MicOff size={20} /> : <Mic size={20} />}
                 <span>{dictating ? "Stop" : "Voice"}</span>
@@ -1523,8 +1837,10 @@ export function ChatPage() {
               <button
                 type="button"
                 className="primary-button"
+                aria-label="Send"
+                title="Send"
                 onClick={() => void handleSend()}
-                disabled={(!draft.trim() && attachments.length === 0) || !activeConnection || !activeModel || processingAttachments}
+                disabled={(!draft.trim() && attachments.length === 0) || !activeConnection || !activeModel || loadingConnections || processingAttachments}
               >
                 <SendHorizonal size={17} /> <span>Send</span>
               </button>
@@ -1532,32 +1848,16 @@ export function ChatPage() {
           </div>
         </div>
 
-        {messages.length === 0 && (
-          <div className="welcome-suggestions" aria-label="Prompt suggestions">
-            <button type="button" onClick={() => setDraft("Help me write, debug, or review this code: ")}>
-              <Code2 size={16} aria-hidden="true" /><span>Code</span>
-            </button>
-            <button type="button" onClick={() => setDraft("Teach me about this topic: ")}>
-              <GraduationCap size={16} aria-hidden="true" /><span>Learn</span>
-            </button>
-            <button type="button" onClick={() => setDraft("Help me write or edit: ")}>
-              <PenLine size={16} aria-hidden="true" /><span>Write</span>
-            </button>
-            <button type="button" onClick={() => setDraft("Help me think through this: ")}>
-              <Coffee size={16} aria-hidden="true" /><span>Life stuff</span>
-            </button>
-            <button type="button" onClick={() => setDraft("Surprise me with something interesting.")}>
-              <Sparkles size={16} aria-hidden="true" /><span>Conduit’s choice</span>
-            </button>
-          </div>
-        )}
-
-        <p className="chat-footer">Conduit can make mistakes. {tokenSummary} tokens</p>
-        {connectionError && <p className="error-alert" role="alert">{connectionError} <Link to="/api-config">Open API Config</Link></p>}
-        {!connectionError && !loadingConnections && !activeConnection && (
-          <p className="error-alert" role="status">No active connection is configured. <Link to="/api-config">Open API Config</Link> to add or activate one.</p>
-        )}
-        {error && <p className="error-alert" role="alert">{error}</p>}
+        <p className="chat-footer">
+          <span>Conduit can make mistakes</span>
+          <span className="chat-footer-separator" aria-hidden="true">·</span>
+          <span className={`token-summary${hasCompleteUsage ? " is-reported" : " is-estimated"}`} title={tokenSummary}>
+            <strong>{hasCompleteUsage ? reportedUsage.input + reportedUsage.output : `~${estimatedTokens}`}</strong>
+            <span>tokens</span>
+            <small>{hasCompleteUsage ? "provider-reported" : "estimated"}</small>
+          </span>
+        </p>
+        {error && status !== "failed" && <p className="error-alert" role="alert">{error}</p>}
         {vaultError && <p className="error-alert" role="alert">{vaultError}</p>}
       </main>
       </div>

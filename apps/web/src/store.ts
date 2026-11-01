@@ -64,6 +64,7 @@ interface AppState {
   keys: ApiKeyRecord[];
   connections: Connection[];
   activeConnectionId: string | null;
+  comparisonJudgeConnectionId: string | null;
   conversations: ChatConversation[];
   activeConversationId: string | null;
   userMemories: string[];
@@ -81,6 +82,7 @@ interface AppState {
   setKeys: (keys: ApiKeyRecord[]) => void;
   setConnections: (connections: Connection[]) => void;
   setActiveConnectionId: (id: string | null) => void;
+  setComparisonJudgeConnectionId: (id: string | null) => void;
   setActiveKeyId: (id: string | null) => void;
   setActiveModel: (value: string) => void;
   setConversations: (conversations: ChatConversation[]) => void;
@@ -103,6 +105,7 @@ export const useAppStore = create<AppState>((set) => ({
   keys: [],
   connections: [],
   activeConnectionId: null,
+  comparisonJudgeConnectionId: null,
   conversations: [],
   activeConversationId: null,
   userMemories: [],
@@ -122,6 +125,7 @@ export const useAppStore = create<AppState>((set) => ({
   setKeys: (keys) => set({ keys }),
   setConnections: (connections) => set({ connections }),
   setActiveConnectionId: (id) => set({ activeConnectionId: id }),
+  setComparisonJudgeConnectionId: (id) => set({ comparisonJudgeConnectionId: id }),
   setActiveKeyId: (id) => set({ activeKeyId: id }),
   setActiveModel: (value) => set({ activeModel: value }),
   setConversations: (conversations) => set({ conversations }),

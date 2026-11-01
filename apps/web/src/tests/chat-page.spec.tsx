@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -79,6 +79,7 @@ function setupStore(conversations: ChatConversation[] = []) {
     dataKey: {} as CryptoKey,
     connections: [connection],
     activeConnectionId: connection.id,
+    comparisonJudgeConnectionId: null,
     activeModel: "gpt-test",
     conversations,
     activeConversationId: conversations[0]?.id ?? null,
@@ -119,29 +120,104 @@ afterEach(() => {
 });
 
 describe("chat page", () => {
-  it("keeps history and settings in the sidebar and opens chat options from there", async () => {
+  it("keeps navigation in the sidebar and opens chat settings from the topbar", async () => {
     const user = userEvent.setup();
     renderChat();
-    await screen.findByText(/OpenAI · gpt-test/);
+    await screen.findByRole("button", { name: /Choose model\. Current: OpenAI · gpt-test/ });
 
     const sidebarNav = screen.getByRole("navigation", { name: "Workspace navigation" });
     expect(within(sidebarNav).getByRole("link", { name: "Chat history" })).toBeTruthy();
-    expect(within(sidebarNav).getByRole("link", { name: "Settings" })).toBeTruthy();
-    await user.click(within(sidebarNav).getByRole("button", { name: "More options" }));
+    expect(within(sidebarNav).queryByRole("link", { name: "Settings" })).toBeNull();
+    const sidebarFooter = screen.getByRole("navigation", { name: "Settings and connections" });
+    expect(within(sidebarFooter).getByRole("link", { name: "Connect AI" })).toBeTruthy();
+    expect(within(sidebarFooter).getByRole("link", { name: "Settings" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Search chats" })).toBeNull();
+    expect(within(sidebarNav).queryByRole("button", { name: "More options" })).toBeNull();
+    expect(document.querySelector(".welcome-suggestions")).toBeTruthy();
+    expect(document.querySelector(".chat-topbar-label")).toBeNull();
+    expect(document.querySelector(".chat-topbar-title")?.textContent).toBe("New chat");
+    expect(screen.getByRole("textbox", { name: "Message" }).getAttribute("rows")).toBe("1");
+    const settingsButton = screen.getByRole("button", { name: "Chat settings" });
+    expect(settingsButton.getAttribute("aria-expanded")).toBe("false");
+    await user.click(settingsButton);
 
     expect(document.querySelector<HTMLDetailsElement>(".generation-options")?.open).toBe(true);
+    expect(document.querySelector(".generation-options summary")).toBeNull();
+    expect(screen.queryByText("More options")).toBeNull();
+    await user.click(settingsButton);
+    expect(document.querySelector<HTMLDetailsElement>(".generation-options")?.open).toBe(false);
+  });
+
+  it("searches available models from the header picker", async () => {
+    const multiModelConnection = { ...connection, models: ["gpt-test", "gpt-4o", "o3-mini"] };
+    mocks.getConnections.mockResolvedValue({
+      connections: [multiModelConnection],
+      activeId: multiModelConnection.id,
+    });
+    useAppStore.setState({
+      connections: [multiModelConnection],
+      activeConnectionId: multiModelConnection.id,
+      activeModel: "gpt-test",
+    });
+    const user = userEvent.setup();
+    renderChat();
+    await user.click(await screen.findByRole("button", { name: /Choose model\. Current: OpenAI · gpt-test/ }));
+    await user.type(screen.getByRole("searchbox", { name: "Search models" }), "4o");
+    await user.click(within(screen.getByRole("listbox", { name: "Available models" })).getByText("gpt-4o"));
+
+    expect(screen.getByRole("button", { name: /Choose model\. Current: OpenAI · gpt-4o/ })).toBeTruthy();
+  });
+
+  it("fills the composer from an empty-state suggestion", async () => {
+    const user = userEvent.setup();
+    renderChat();
+    await screen.findByRole("button", { name: /Choose model\. Current: OpenAI · gpt-test/ });
+
+    await user.click(screen.getByRole("button", { name: "Help me brainstorm ideas" }));
+    expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe("Help me brainstorm ideas");
+  });
+
+  it("keeps Ctrl+K as new chat and focuses the conversation search", async () => {
+    setupStore([existingConversation()]);
+    renderChat();
+    await screen.findByText("Previous answer");
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+
+    expect(useAppStore.getState().activeConversationId).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("searchbox", { name: "Search conversations" }));
+  });
+
+  it("groups conversations and supports inline rename and delete", async () => {
+    const user = userEvent.setup();
+    setupStore([existingConversation()]);
+    renderChat();
+    const earlierGroup = screen.getByRole("region", { name: "Earlier" });
+
+    await user.click(within(earlierGroup).getByRole("button", { name: "Rename Test conversation" }));
+    const renameInput = screen.getByRole("textbox", { name: "Rename Test conversation" });
+    await user.clear(renameInput);
+    await user.type(renameInput, "Renamed conversation");
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: "Renamed conversation" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Delete Renamed conversation" }));
+    await user.click(screen.getByRole("button", { name: /^Delete$/ }));
+    expect(useAppStore.getState().conversations).toEqual([]);
+    expect(useAppStore.getState().activeConversationId).toBeNull();
   });
 
   it("does not show placeholder plan, profile, or cowork UI", async () => {
     renderChat();
-    await screen.findByText(/OpenAI · gpt-test/);
+    await screen.findByRole("button", { name: /Choose model\. Current: OpenAI · gpt-test/ });
 
     expect(screen.queryByText("Free plan")).toBeNull();
     expect(screen.queryByText("Cowork")).toBeNull();
     expect(screen.queryByText("Ali")).toBeNull();
   });
 
-  it("automatically compares both configured APIs when exactly two connections exist", async () => {
+  it("automatically compares both configured APIs with the system judge by default", async () => {
     const gemini: Connection = {
       ...connection,
       id: "gemini",
@@ -155,11 +231,10 @@ describe("chat page", () => {
     });
     const user = userEvent.setup();
     renderChat();
-    await screen.findByText(/OpenAI · gpt-test/);
+    await screen.findByRole("button", { name: /Choose model\. Current: OpenAI · gpt-test/ });
 
     expect(screen.getByText(/Automatic comparison is on/)).toBeTruthy();
     expect(screen.queryByRole("checkbox", { name: "Compare multiple API connections" })).toBeNull();
-    await user.selectOptions(screen.getByRole("combobox", { name: "Comparison judge" }), "system");
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Hello both");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
@@ -177,7 +252,7 @@ describe("chat page", () => {
   it("sends a message and stores the streamed model and usage", async () => {
     const user = userEvent.setup();
     renderChat();
-    await screen.findByText(/OpenAI · gpt-test/);
+    await screen.findByRole("button", { name: /Choose model\. Current: OpenAI · gpt-test/ });
 
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Hello provider");
     await user.click(screen.getByRole("button", { name: "Send" }));
@@ -192,10 +267,24 @@ describe("chat page", () => {
     expect(screen.getByText("Response complete")).toBeTruthy();
   });
 
+  it("uses a saved API key when no key is active", async () => {
+    mocks.getConnections.mockResolvedValue({ connections: [connection], activeId: null });
+    useAppStore.setState({ activeConnectionId: null, activeModel: "" });
+    const user = userEvent.setup();
+    renderChat();
+    await screen.findByRole("button", { name: /Choose model\. Current: OpenAI · gpt-test/ });
+
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Use any saved key");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Mocked response")).toBeTruthy();
+    expect(mocks.streamChat.mock.calls[0]?.[0]).toBe(connection.id);
+  });
+
   it("uses compact memories in new chats without resending the earlier conversation", async () => {
     const user = userEvent.setup();
     renderChat();
-    await screen.findByText(/OpenAI · gpt-test/);
+    await screen.findByRole("button", { name: /Choose model\. Current: OpenAI · gpt-test/ });
 
     await user.type(screen.getByRole("textbox", { name: "Message" }), "My name is Ali");
     await user.click(screen.getByRole("button", { name: "Send" }));
@@ -263,6 +352,7 @@ describe("chat page", () => {
     mocks.getConnections.mockResolvedValue({
       connections: [openai, gemini, judge],
       activeId: judge.id,
+      comparisonJudgeId: judge.id,
     });
     mocks.streamChat.mockImplementationOnce(async (
       _connectionId: string,
@@ -288,10 +378,8 @@ describe("chat page", () => {
     });
     const user = userEvent.setup();
     renderChat();
-    await screen.findByText(/Groq · groq-model/);
-    const sidebarNav = screen.getByRole("navigation", { name: "Workspace navigation" });
-    await user.click(within(sidebarNav).getByRole("button", { name: "More options" }));
-    await user.click(screen.getByRole("checkbox", { name: "Enable multi-provider comparison" }));
+    await screen.findByRole("button", { name: /Choose model\. Current: Groq · groq-model/ });
+    await user.click(screen.getByRole("button", { name: "Chat settings" }));
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Hello everyone");
     await user.click(screen.getByRole("button", { name: "Send" }));
 
@@ -326,7 +414,7 @@ describe("chat page", () => {
   it("attaches any number of text and binary files and sends them as text", async () => {
     const user = userEvent.setup();
     const { container } = renderChat();
-    await screen.findByText(/OpenAI · gpt-test/);
+    await screen.findByRole("button", { name: /Choose model\. Current: OpenAI · gpt-test/ });
 
     await user.click(screen.getByRole("button", { name: "Attach" }));
     expect(await screen.findByRole("button", { name: "Choose files" })).toBeTruthy();
@@ -383,7 +471,7 @@ describe("chat page", () => {
   it("extracts OCR text from an attached image before sending it to the API", async () => {
     const user = userEvent.setup();
     const { container } = renderChat();
-    await screen.findByText(/OpenAI · gpt-test/);
+    await screen.findByRole("button", { name: /Choose model\. Current: OpenAI · gpt-test/ });
 
     await user.click(screen.getByRole("button", { name: "Attach" }));
     await user.click(await screen.findByRole("button", { name: "Choose files" }));
@@ -430,7 +518,7 @@ describe("chat page", () => {
   it("serializes a selected folder as text for the chat API", async () => {
     const user = userEvent.setup();
     const { container } = renderChat();
-    await screen.findByText(/OpenAI · gpt-test/);
+    await screen.findByRole("button", { name: /Choose model\. Current: OpenAI · gpt-test/ });
 
     const sourceFile = new File(["export const answer = 42;"], "index.ts", { type: "text/plain" });
     Object.defineProperty(sourceFile, "webkitRelativePath", { value: "project/src/index.ts" });
@@ -495,7 +583,7 @@ describe("chat page", () => {
   it("reports when converted attachment text exceeds the API limit instead of truncating it", async () => {
     const user = userEvent.setup();
     const { container } = renderChat();
-    await screen.findByText(/OpenAI · gpt-test/);
+    await screen.findByRole("button", { name: /Choose model\. Current: OpenAI · gpt-test/ });
 
     const oversizedFile = new File(["x".repeat(180_001)], "large.txt", { type: "text/plain" });
     await user.upload(
@@ -529,7 +617,7 @@ describe("chat page", () => {
     }));
     const user = userEvent.setup();
     renderChat();
-    await screen.findByText(/OpenAI · gpt-test/);
+    await screen.findByRole("button", { name: /Choose model\. Current: OpenAI · gpt-test/ });
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Start a response");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await user.click(await screen.findByRole("button", { name: "Stop response generation" }));
@@ -542,6 +630,8 @@ describe("chat page", () => {
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Retry this");
     await user.click(screen.getByRole("button", { name: "Send" }));
     expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(await screen.findByText("This request couldn't be completed")).toBeTruthy();
+    expect(screen.getByText("Technical details").closest("details")?.open).toBe(false);
     await user.click(await screen.findByRole("button", { name: "Retry" }));
     expect(await screen.findByText("Recovered response")).toBeTruthy();
   });

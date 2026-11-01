@@ -89,6 +89,7 @@ export type Connection = z.infer<typeof ConnectionSchema>;
 export const ConnectionsResponseSchema = z.object({
   connections: z.array(ConnectionSchema),
   activeId: z.string().nullable(),
+  comparisonJudgeId: z.string().nullable().optional(),
 }).strict();
 export type ConnectionsResponse = z.infer<typeof ConnectionsResponseSchema>;
 
@@ -225,7 +226,7 @@ export const ChatComparisonRequestSchema = z.object({
   candidates: z.array(z.object({
     connectionId: z.string().min(1),
     model: z.string().min(1),
-  }).strict()).min(2).max(10),
+  }).strict()).min(1).max(10),
 }).strict().refine(
   (comparison) => new Set(comparison.candidates.map(({ connectionId }) => connectionId)).size
     === comparison.candidates.length,
@@ -265,6 +266,9 @@ export const ValidationIdRequestSchema = z.object({
 export const ActiveConnectionRequestSchema = z.object({
   id: z.string().nullable(),
 });
+export const ComparisonJudgeRequestSchema = z.object({
+  id: z.string().nullable(),
+}).strict();
 
 export const ChatStreamEventSchema = z.object({
   delta: z.string().optional(),
@@ -290,6 +294,7 @@ export type StoredConnection = z.infer<typeof StoredConnectionSchema>;
 export const ConnectionStoreSchema = z.object({
   connections: z.array(StoredConnectionSchema),
   activeId: z.string().nullable(),
+  comparisonJudgeId: z.string().nullable().optional(),
 }).passthrough();
 export type ConnectionStore = z.infer<typeof ConnectionStoreSchema>;
 
