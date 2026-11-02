@@ -22,3 +22,36 @@ export function BrandLogo({ className, ...props }: ComponentPropsWithoutRef<"svg
     </svg>
   );
 }
+
+export function ConduitMark({ className, ...props }: ComponentPropsWithoutRef<"svg">) {
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      role="img"
+      aria-label="CONDUIT"
+      focusable="false"
+      className={className}
+      {...props}
+    >
+      <circle cx="50" cy="50" r="49.5" fill="#FF3B30" stroke="#000" strokeWidth="1" />
+      <circle cx="50" cy="50" r="43.25" fill="#FF9500" />
+      <circle cx="50" cy="50" r="37" fill="#FFD60A" />
+      <circle cx="50" cy="50" r="30.75" fill="#2EE66B" />
+      <circle cx="50" cy="50" r="24.5" fill="#00D1FF" />
+      <circle cx="50" cy="50" r="18.25" fill="#A855F7" />
+      <circle cx="50" cy="50" r="13" fill="#FF2D9B" />
+      <text
+        x="50"
+        y="50"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontFamily='"Archivo Black", "Arial Black", "Helvetica Neue", Arial, sans-serif'
+        fontSize="32.5"
+        fontWeight="900"
+        fill="#FFFFFF"
+      >
+        C
+      </text>
+    </svg>
+  );
+}

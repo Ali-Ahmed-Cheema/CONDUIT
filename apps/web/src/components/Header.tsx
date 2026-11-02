@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { GlassTabBar, HelpButton, type GlassTab } from "@conduit/ui";
 import { useAppStore } from "../store";
-import { BrandLogo } from "./BrandLogo";
+import { ConduitMark } from "./BrandLogo";
 import { PromptLibrary } from "./PromptLibrary";
 
 interface HeaderProps {
@@ -81,7 +81,7 @@ export function Header({ title, showBack = false }: HeaderProps) {
       </GlassTabBar>
       <HelpButton screen={title} />
       <Link to="/" className="brand-home" aria-label="CONDUIT home">
-        <BrandLogo className="brand-home-mark" />
+        <ConduitMark className="brand-home-mark" />
       </Link>
     </header>
   );

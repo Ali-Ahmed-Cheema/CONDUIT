@@ -5394,8 +5394,8 @@ textarea:focus-visible {
 }
 
 .brand-home-mark {
-  width: clamp(150px, 18vw, 210px);
-  height: auto;
+  width: 36px;
+  height: 36px;
 }
 
 .brand-home:hover {
