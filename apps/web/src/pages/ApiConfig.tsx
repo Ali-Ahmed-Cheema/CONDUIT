@@ -13,6 +13,7 @@ import {
   validateKey,
 } from "../api";
 import { Header } from "../components/Header";
+import { MarkdownContent } from "../components/MarkdownContent";
 import { GlassCard } from "@conduit/ui";
 import type { ConnectionsResponse, ProviderId } from "../types";
 import { useAppStore } from "../store";
@@ -41,6 +42,7 @@ const providerNames: Record<ProviderId, string> = {
 
 export function ApiConfigPage() {
   const connections = useAppStore((state) => state.connections);
+  const conversations = useAppStore((state) => state.conversations);
   const setConnections = useAppStore((state) => state.setConnections);
   const activeConnectionId = useAppStore((state) => state.activeConnectionId);
   const comparisonJudgeId = useAppStore((state) => state.comparisonJudgeConnectionId);
@@ -59,6 +61,13 @@ export function ApiConfigPage() {
   const [bulkFileName, setBulkFileName] = useState("");
   const [bulkDuplicateCount, setBulkDuplicateCount] = useState(0);
   const [bulkAllowUnknownProbe, setBulkAllowUnknownProbe] = useState(false);
+  const providerActivity = conversations
+    .flatMap((conversation) => conversation.messages
+      .filter((message) => message.role === "assistant" && (message.comparisonNotice || message.alternatives?.length))
+      .map((message) => ({ conversation, message })))
+    .sort((left, right) =>
+      (right.message.ts ?? right.conversation.updatedAt) - (left.message.ts ?? left.conversation.updatedAt))
+    .slice(0, 5);
 
   useEffect(() => {
     let cancelled = false;
@@ -472,6 +481,29 @@ export function ApiConfigPage() {
             <p className="page-description">An API key can be the judge when at least three keys are saved, leaving two or more keys to respond.</p>
           )}
         </section>
+        {providerActivity.length > 0 && (
+          <section className="key-card glass" aria-labelledby="provider-activity-heading">
+            <h2 id="provider-activity-heading">Recent provider responses</h2>
+            <p className="page-description">Comparison notes and individual provider responses from recent conversations.</p>
+            <div className="comparison-responses">
+              {providerActivity.map(({ conversation, message }, index) => (
+                <details key={`${conversation.id}-${message.id ?? message.ts ?? index}`}>
+                  <summary>{conversation.title} · {new Date(message.ts ?? conversation.updatedAt).toLocaleString()}</summary>
+                  {message.comparisonNotice && <p role="status">{message.comparisonNotice}</p>}
+                  {message.alternatives?.map((alternative, alternativeIndex) => (
+                    <section key={`${alternative.providerName}-${alternative.model}-${alternativeIndex}`}>
+                      <h3>{alternative.providerName} · {alternative.model}</h3>
+                      <MarkdownContent
+                        content={alternative.content}
+                        onCopyError={() => setError("Could not copy code to the clipboard.")}
+                      />
+                    </section>
+                  ))}
+                </details>
+              ))}
+            </div>
+          </section>
+        )}
         {error && <p className="error-alert" role="alert">{error}</p>}
         {statusMessage && <p className="success-alert" role="status">{statusMessage}</p>}
 

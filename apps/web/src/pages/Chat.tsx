@@ -1547,9 +1547,7 @@ export function ChatPage() {
                           <span /><span /><span />
                         </div>
                       ) : ""}
-                      {message.comparisonNotice && (
-                        <p className="comparison-mode-notice" role="status">{message.comparisonNotice}</p>
-                      )}
+
                       {message.attachments?.length ? (
                         <ul className="attachment-list message-attachments" aria-label="Attached files">
                           {message.attachments.map((file, index) => (
@@ -1560,38 +1558,6 @@ export function ChatPage() {
                             </li>
                           ))}
                         </ul>
-                      ) : null}
-                      {message.alternatives?.length ? (
-                        <details className="comparison-responses">
-                          <summary>View {message.alternatives.length} provider responses</summary>
-                          {message.alternatives.map((alternative, index) => {
-                            const alternativeId = `${translationMessageId}-alternative-${index}`;
-                            const alternativeTranslation = translatedResponses[alternativeId]?.source === alternative.content
-                              ? translatedResponses[alternativeId]
-                              : undefined;
-                            return (
-                              <section key={`${alternative.providerName}-${alternative.model}-${index}`}>
-                                <details>
-                                  <summary>{alternative.providerName} · {alternative.model}</summary>
-                                  <MarkdownContent
-                                    content={alternativeTranslation?.content ?? alternative.content}
-                                    onCopyError={() => setError("Could not copy code to the clipboard.")}
-                                    onAction={(prompt) => {
-                                      if (sending) {
-                                        setDraft(prompt);
-                                        return;
-                                      }
-                                      void handleSend(prompt);
-                                    }}
-                                  />
-                                  <div className="message-actions">
-                                    {renderTranslationControls(alternativeId, alternative.content)}
-                                  </div>
-                                </details>
-                              </section>
-                            );
-                          })}
-                        </details>
                       ) : null}
                       {message.role === "assistant" && message.content && (
                         <div className="message-actions">
