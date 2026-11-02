@@ -38,7 +38,6 @@
   /* optional fine-tuning for the letter */
   --c-nudge-y: 0px;
   --c-stretch: 1.12;
-  --c-shadow-offset: calc(var(--size) * 0.012);
 
   display: inline-grid;
   place-items: center;
@@ -70,16 +69,13 @@
 }
 
 .logo__c {
-  position: relative;
-  bottom: 0.5px;
   grid-area: 1 / 1;
   font-family: "Archivo Black", "Arial Black", "Helvetica Neue", Arial, sans-serif;
   font-weight: 900;
-  font-size: calc(var(--size) * 0.300);
+  font-size: calc(var(--size) * 0.325);
   line-height: 1;
   color: var(--logo-white);
   user-select: none;
-  text-shadow: var(--c-shadow-offset) var(--c-shadow-offset) 0 var(--logo-magenta);
   transform: translateY(var(--c-nudge-y)) scaleX(var(--c-stretch));
 }
 
