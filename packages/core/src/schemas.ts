@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const MAX_API_CONNECTIONS = 1_000;
+
 export const ProviderIdSchema = z.enum([
   "openai",
   "anthropic",

@@ -101,6 +101,7 @@ describe("API config page", () => {
     const user = userEvent.setup();
     renderConfig();
     await screen.findByText(/No API connections saved/);
+    expect(screen.getByText("(0/1000 saved)")).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Your AI key"), { target: { value: "sk-mock-provider-key" } });
     expect(screen.getByText(/Likely API type: OpenAI chat service/)).toBeTruthy();
@@ -189,7 +190,7 @@ describe("API config page", () => {
       "save:validation-sk-second-key",
     ]);
     expect((await screen.findByRole("status")).textContent).toContain(
-      "API key import complete: 2 added; 0 not added; 0 duplicates skipped; 0 skipped because the 10-connection limit was reached; 0 not checked.",
+      "API key import complete: 2 added; 0 not added; 0 duplicates skipped; 0 skipped because the 1000-connection limit was reached; 0 not checked.",
     );
     expect(useAppStore.getState().activeConnectionId).toBe(first.id);
   });
@@ -271,7 +272,7 @@ describe("API config page", () => {
     expect(mocks.validateKey).toHaveBeenCalledTimes(1);
     expect(mocks.addConnection).not.toHaveBeenCalled();
     expect((await screen.findByRole("status")).textContent).toContain(
-      "API key import complete: 0 added; 1 not added; 0 duplicates skipped; 0 skipped because the 10-connection limit was reached; 1 not checked. Provider rate limit reached",
+      "API key import complete: 0 added; 1 not added; 0 duplicates skipped; 0 skipped because the 1000-connection limit was reached; 1 not checked. Provider rate limit reached",
     );
   });
 

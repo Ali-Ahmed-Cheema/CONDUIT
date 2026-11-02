@@ -937,8 +937,8 @@ describe("connection mutation concurrency", () => {
     expect(await responses.find((response) => response.status === 409)?.text()).toContain("VALIDATION_IN_USE");
   });
 
-  it("enforces the ten-connection cap when different keys are added concurrently", async () => {
-    persistedStore.connections = Array.from({ length: 9 }, (_, index) => ({
+  it("enforces the 1000-connection cap when different keys are added concurrently", async () => {
+    persistedStore.connections = Array.from({ length: 999 }, (_, index) => ({
       id: `existing-${index}`,
       provider: "openai",
       providerName: "OpenAI",
@@ -962,7 +962,7 @@ describe("connection mutation concurrency", () => {
     ));
 
     expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
-    expect(persistedStore.connections).toHaveLength(10);
+    expect(persistedStore.connections).toHaveLength(1_000);
   });
 
   it("prevents replacing a connection with a key already saved elsewhere", async () => {

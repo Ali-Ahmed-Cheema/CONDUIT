@@ -9,6 +9,7 @@ import {
   ChatGenerationOptionsSchema,
   ChatRequestSchema,
   ComparisonJudgeRequestSchema,
+  MAX_API_CONNECTIONS,
   ValidateKeyRequestSchema,
   ValidationIdRequestSchema,
 } from "@conduit/core";
@@ -559,8 +560,8 @@ app.post("/api/connections", async (request, response, next) => {
         return;
       }
       const store = await readStore();
-      if (store.connections.length >= 10) {
-        response.status(409).json({ error: "You can save up to 10 API connections." });
+      if (store.connections.length >= MAX_API_CONNECTIONS) {
+        response.status(409).json({ error: `You can save up to ${MAX_API_CONNECTIONS} API connections.` });
         return;
       }
       if (store.connections.some((connection) => decryptApiKey(connection.encryptedKey) === candidate.key)) {

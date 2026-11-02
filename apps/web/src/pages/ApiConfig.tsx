@@ -1,5 +1,6 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { Check, RefreshCw, Trash2, Upload, X } from "lucide-react";
+import { MAX_API_CONNECTIONS } from "@conduit/core";
 import {
   ApiRequestError,
   addConnection,
@@ -175,9 +176,9 @@ export function ApiConfigPage() {
 
     const validKeys = bulkKeys.filter((key) => key.length >= 8 && key.length <= 4096);
     const invalidLengthCount = bulkKeys.length - validKeys.length;
-    const availableSlots = Math.max(0, 10 - useAppStore.getState().connections.length);
+    const availableSlots = Math.max(0, MAX_API_CONNECTIONS - useAppStore.getState().connections.length);
     if (availableSlots === 0) {
-      setError("You can save up to 10 API connections. Delete a connection before importing more.");
+      setError(`You can save up to ${MAX_API_CONNECTIONS} API connections. Delete a connection before importing more.`);
       return;
     }
 
@@ -235,7 +236,7 @@ export function ApiConfigPage() {
         `${savedCount} added`,
         `${failedCount} not added`,
         `${bulkDuplicateCount} duplicate${bulkDuplicateCount === 1 ? "" : "s"} skipped`,
-        `${skippedForLimit} skipped because the 10-connection limit was reached`,
+        `${skippedForLimit} skipped because the ${MAX_API_CONNECTIONS}-connection limit was reached`,
         `${notCheckedCount} not checked`,
       ];
       setStatusMessage(
@@ -380,7 +381,7 @@ export function ApiConfigPage() {
             maxLength={4096}
             disabled={busy}
           />
-          <button type="submit" className="primary-button" disabled={busy || loading || (!replacingId && connections.length >= 10)}>
+          <button type="submit" className="primary-button" disabled={busy || loading || (!replacingId && connections.length >= MAX_API_CONNECTIONS)}>
             {busy ? "Checking..." : replacing ? "Check and replace" : "Check and save"}
           </button>
           {replacingId && (
@@ -438,13 +439,13 @@ export function ApiConfigPage() {
                 />
                 I consent to checking keys with unrecognized formats against supported AI providers. No chat messages will be sent.
               </label>
-              <button type="submit" className="primary-button" disabled={busy || loading || connections.length >= 10}>
+              <button type="submit" className="primary-button" disabled={busy || loading || connections.length >= MAX_API_CONNECTIONS}>
                 <Upload size={16} /> {busy ? "Checking keys..." : "Check and add keys"}
               </button>
             </form>
           )}
         </section>
-        <p className="counter">({connections.length}/10 saved)</p>
+        <p className="counter">({connections.length}/{MAX_API_CONNECTIONS} saved)</p>
         <section className="key-card glass" aria-labelledby="comparison-judge-heading">
           <h2 id="comparison-judge-heading">Response selection</h2>
           <p className="page-description">
