@@ -38,6 +38,7 @@
   /* optional fine-tuning for the letter */
   --c-nudge-y: 0px;
   --c-stretch: 1.12;
+  --c-shadow-offset: calc(var(--size) * 0.012);
 
   display: inline-grid;
   place-items: center;
@@ -78,6 +79,7 @@
   line-height: 1;
   color: var(--logo-white);
   user-select: none;
+  text-shadow: var(--c-shadow-offset) var(--c-shadow-offset) 0 var(--logo-magenta);
   transform: translateY(var(--c-nudge-y)) scaleX(var(--c-stretch));
 }
 
